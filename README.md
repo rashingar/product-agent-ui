@@ -72,6 +72,44 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
+## Local Startup Checklist
+
+1. Start the Product-Agent API:
+
+```powershell
+start Product-Agent API on 127.0.0.1:8000
+```
+
+2. Start the commerce API from `price-fetcher`:
+
+```powershell
+python -m pip install -e .
+pricefetcher-api
+```
+
+3. Start the UI:
+
+```powershell
+npm run dev
+```
+
+4. Open:
+
+```text
+http://127.0.0.1:5173
+```
+
+Required local files for the commerce workflows:
+
+- `C:\Users\user\Downloads\sourceCata.csv`
+- `C:\Exports\CheckWHouseBalance.csv` for bridge runs
+
+You can also run a terminal diagnostic check on Windows:
+
+```powershell
+.\diagnose-windows.cmd
+```
+
 Local dev uses Vite proxies by default:
 
 ```bash
@@ -88,6 +126,10 @@ VITE_COMMERCE_API_PROXY_TARGET=http://127.0.0.1:8001
 
 Set `VITE_API_BASE_URL` or `VITE_COMMERCE_API_BASE_URL` only when the browser should call
 that backend directly instead of using the Vite proxy.
+
+Leave browser base URLs empty when using the Vite dev proxy. Use direct base URLs only if CORS
+is configured by the backend. The `/commerce-api` route works through the Vite dev proxy; it
+will not work by opening static files directly in the browser.
 
 ## Scripts
 

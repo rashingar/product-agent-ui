@@ -342,6 +342,19 @@ function SummaryItem({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+function PriceMonitoringSetupHint() {
+  return (
+    <div className="setup-hint compact">
+      <strong>Price Monitoring setup check</strong>
+      <ul>
+        <li>Confirm the run exists or create a new selection run.</li>
+        <li>Confirm the selection run created <code>input.csv</code>.</li>
+        <li>Confirm fetch created an enriched CSV before loading review.</li>
+      </ul>
+    </div>
+  );
+}
+
 export function PriceMonitoringPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [brands, setBrands] = useState<string[]>([]);
@@ -880,9 +893,19 @@ export function PriceMonitoringPage() {
           </button>
         </div>
 
-        {previewError ? <ErrorState message={previewError} /> : null}
+        {previewError ? (
+          <>
+            <ErrorState message={previewError} />
+            <PriceMonitoringSetupHint />
+          </>
+        ) : null}
         {previewResult ? <SelectionResultBlock result={previewResult} /> : null}
-        {createError ? <ErrorState message={createError} /> : null}
+        {createError ? (
+          <>
+            <ErrorState message={createError} />
+            <PriceMonitoringSetupHint />
+          </>
+        ) : null}
         {createResult ? <SelectionResultBlock result={createResult} /> : null}
       </section>
 
@@ -914,7 +937,12 @@ export function PriceMonitoringPage() {
 
         {isRunsLoading ? <LoadingState label="Loading run list..." /> : null}
         {runListMessage ? <p className="state-block">{runListMessage}</p> : null}
-        {loadRunError ? <ErrorState message={loadRunError} /> : null}
+        {loadRunError ? (
+          <>
+            <ErrorState message={loadRunError} />
+            <PriceMonitoringSetupHint />
+          </>
+        ) : null}
 
         {runs.length > 0 ? (
           <div className="table-wrap">
@@ -991,7 +1019,12 @@ export function PriceMonitoringPage() {
           {isFetchLoading ? "Fetching..." : "Fetch prices"}
         </button>
 
-        {fetchError ? <ErrorState message={fetchError} /> : null}
+        {fetchError ? (
+          <>
+            <ErrorState message={fetchError} />
+            <PriceMonitoringSetupHint />
+          </>
+        ) : null}
         {fetchResult ? <FetchResultBlock result={fetchResult} /> : null}
       </section>
 
@@ -1030,7 +1063,12 @@ export function PriceMonitoringPage() {
           </button>
         </div>
 
-        {reviewError ? <ErrorState message={reviewError} /> : null}
+        {reviewError ? (
+          <>
+            <ErrorState message={reviewError} />
+            <PriceMonitoringSetupHint />
+          </>
+        ) : null}
         {review ? (
           <>
             <dl className="summary-grid">
@@ -1162,7 +1200,12 @@ export function PriceMonitoringPage() {
           </>
         ) : null}
 
-        {applyError ? <ErrorState message={applyError} /> : null}
+        {applyError ? (
+          <>
+            <ErrorState message={applyError} />
+            <PriceMonitoringSetupHint />
+          </>
+        ) : null}
         {applyResult ? <ApplyActionsResultBlock result={applyResult} /> : null}
       </section>
 
@@ -1202,7 +1245,12 @@ export function PriceMonitoringPage() {
         >
           {isExportLoading ? "Exporting..." : "Export OpenCart price update CSV"}
         </button>
-        {exportError ? <ErrorState message={exportError} /> : null}
+        {exportError ? (
+          <>
+            <ErrorState message={exportError} />
+            <PriceMonitoringSetupHint />
+          </>
+        ) : null}
         {exportResult ? <ExportResultBlock result={exportResult} /> : null}
       </section>
     </div>

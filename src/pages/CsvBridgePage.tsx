@@ -207,6 +207,19 @@ function BridgeResult({ result }: { result: BridgeRunResponse }) {
   );
 }
 
+function CsvBridgeSetupHint() {
+  return (
+    <div className="setup-hint compact">
+      <strong>CSV/Bridge setup check</strong>
+      <ul>
+        <li>Commerce API must be running: <code>pricefetcher-api</code></li>
+        <li>Safe roots are defined by the backend.</li>
+        <li>Check <code>PRICEFETCHER_FILE_ROOTS</code> if expected folders are missing.</li>
+      </ul>
+    </div>
+  );
+}
+
 export function CsvBridgePage() {
   const [roots, setRoots] = useState<FileRoot[]>([]);
   const [selectedRoot, setSelectedRoot] = useState("");
@@ -457,7 +470,12 @@ export function CsvBridgePage() {
         </div>
 
         {areRootsLoading ? <LoadingState label="Loading safe roots..." /> : null}
-        {rootsError ? <ErrorState message={rootsError} onRetry={() => void loadRoots()} /> : null}
+        {rootsError ? (
+          <>
+            <ErrorState message={rootsError} onRetry={() => void loadRoots()} />
+            <CsvBridgeSetupHint />
+          </>
+        ) : null}
         {!areRootsLoading && !rootsError && roots.length === 0 ? (
           <EmptyState title="No safe roots found" message="The commerce backend returned no roots." />
         ) : null}
@@ -510,10 +528,13 @@ export function CsvBridgePage() {
 
               {isFileListLoading ? <LoadingState label="Loading files..." /> : null}
               {fileListError ? (
-                <ErrorState
-                  message={fileListError}
-                  onRetry={() => void loadFiles(selectedRoot, relativePath)}
-                />
+                <>
+                  <ErrorState
+                    message={fileListError}
+                    onRetry={() => void loadFiles(selectedRoot, relativePath)}
+                  />
+                  <CsvBridgeSetupHint />
+                </>
               ) : null}
 
               {!isFileListLoading && !fileListError && displayItems.length === 0 ? (
@@ -554,7 +575,12 @@ export function CsvBridgePage() {
 
             <div className="editor-panel">
               {isCsvReadLoading ? <LoadingState label="Reading CSV..." /> : null}
-              {csvReadError ? <ErrorState message={csvReadError} /> : null}
+              {csvReadError ? (
+                <>
+                  <ErrorState message={csvReadError} />
+                  <CsvBridgeSetupHint />
+                </>
+              ) : null}
               {!csv && !isCsvReadLoading && !csvReadError ? (
                 <EmptyState title="No CSV open" message="Choose a CSV from the safe file browser." />
               ) : null}

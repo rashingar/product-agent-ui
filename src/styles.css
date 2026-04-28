@@ -614,12 +614,27 @@ th {
   color: var(--success-text);
 }
 
+.status-badge.ok {
+  background: var(--success-bg);
+  color: var(--success-text);
+}
+
 .status-badge.danger {
   background: var(--danger-bg);
   color: var(--danger-text);
 }
 
+.status-badge.error {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
 .status-badge.queued {
+  background: var(--warning-bg);
+  color: var(--warning-text);
+}
+
+.status-badge.warning {
   background: var(--warning-bg);
   color: var(--warning-text);
 }
@@ -669,6 +684,56 @@ th {
 
 .csv-metadata-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.diagnostics-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.diagnostics-list {
+  display: grid;
+  gap: 12px;
+}
+
+.diagnostic-card,
+.setup-hint {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcfc;
+}
+
+.setup-hint.compact {
+  border-style: dashed;
+}
+
+.diagnostic-card p,
+.setup-hint p {
+  margin: 0;
+}
+
+.diagnostic-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.setup-hint ul {
+  display: grid;
+  gap: 5px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+code {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 1px 5px;
+  background: var(--surface-alt);
+  color: var(--text);
 }
 
 .result-block {
@@ -773,6 +838,7 @@ th {
   .summary-grid,
   .catalog-summary-grid,
   .csv-metadata-grid,
+  .diagnostics-summary-grid,
   .filter-grid,
   .browser-layout,
   .save-grid,

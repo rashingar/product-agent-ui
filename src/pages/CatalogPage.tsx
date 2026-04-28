@@ -198,6 +198,20 @@ function SummaryText({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+function CatalogSetupHint() {
+  return (
+    <div className="setup-hint compact">
+      <strong>Catalog setup check</strong>
+      <ul>
+        <li>Commerce API must be running: <code>pricefetcher-api</code></li>
+        <li>Expected catalog file: <code>C:\Users\user\Downloads\sourceCata.csv</code></li>
+        <li>UI endpoint: <code>/commerce-api/catalog/summary</code></li>
+        <li>Backend endpoint: <code>http://127.0.0.1:8001/api/catalog/summary</code></li>
+      </ul>
+    </div>
+  );
+}
+
 export function CatalogPage() {
   const [summary, setSummary] = useState<CatalogSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
@@ -447,7 +461,12 @@ export function CatalogPage() {
           </button>
         </div>
         {isSummaryLoading ? <LoadingState label="Loading catalog summary..." /> : null}
-        {summaryError ? <ErrorState message={summaryError} onRetry={() => void loadSummary()} /> : null}
+        {summaryError ? (
+          <>
+            <ErrorState message={summaryError} onRetry={() => void loadSummary()} />
+            <CatalogSetupHint />
+          </>
+        ) : null}
         {!isSummaryLoading && !summaryError ? (
           <dl className="summary-grid catalog-summary-grid">
             <SummaryCard label="Total products" value={getSummaryNumber(summary, ["total_products", "total"])} />
@@ -627,7 +646,12 @@ export function CatalogPage() {
         ) : null}
 
         {areProductsLoading ? <LoadingState label="Loading catalog products..." /> : null}
-        {productsError ? <ErrorState message={productsError} onRetry={() => void loadProducts()} /> : null}
+        {productsError ? (
+          <>
+            <ErrorState message={productsError} onRetry={() => void loadProducts()} />
+            <CatalogSetupHint />
+          </>
+        ) : null}
         {!areProductsLoading && !productsError && productsResponse.items.length === 0 ? (
           <EmptyState title="No products found" message="Try broadening the current filters." />
         ) : null}

@@ -42,12 +42,14 @@ const commerceApiBaseUrl =
 export class CommerceApiError extends Error {
   readonly status: number;
   readonly details: unknown;
+  readonly path?: string;
 
-  constructor(message: string, status: number, details: unknown) {
+  constructor(message: string, status: number, details: unknown, path?: string) {
     super(message);
     this.name = "CommerceApiError";
     this.status = status;
     this.details = details;
+    this.path = path;
   }
 }
 
@@ -72,6 +74,27 @@ function getPayloadMessage(payload: unknown): string | null {
     const value = payload[key];
     if (typeof value === "string" && value.trim().length > 0) {
       return value;
+    }
+
+    if (Array.isArray(value) && value.length > 0) {
+      return value
+        .map((item) => {
+          if (typeof item === "string") {
+            return item;
+          }
+
+          if (isRecord(item)) {
+            const message = item.msg ?? item.message ?? item.detail;
+            if (typeof message === "string") {
+              return message;
+            }
+
+            return JSON.stringify(item);
+          }
+
+          return String(item);
+        })
+        .join("; ");
     }
   }
 
@@ -365,18 +388,34 @@ function normalizeFetchResult(payload: unknown): FetchPriceMonitoringResult {
 }
 
 async function request<T>(path: string, options: CommerceRequestOptions = {}): Promise<T> {
-  const response = await fetch(`${commerceApiBaseUrl}${path}`, {
-    ...options,
-    headers: buildHeaders(options),
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(`${commerceApiBaseUrl}${path}`, {
+      ...options,
+      headers: buildHeaders(options),
+      body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    });
+  } catch (error) {
+    const rawMessage = error instanceof Error ? error.message : String(error);
+    throw new CommerceApiError(
+      `Commerce API unreachable at ${path}. Is pricefetcher-api running on 127.0.0.1:8001?`,
+      0,
+      rawMessage,
+      path,
+    );
+  }
 
   const payload = await parseResponse(response);
 
   if (!response.ok) {
-    const message =
-      getPayloadMessage(payload) ?? `Commerce API request failed with ${response.status}`;
-    throw new CommerceApiError(message, response.status, payload);
+    const backendMessage = getPayloadMessage(payload) ?? response.statusText;
+    const setupHint =
+      response.status === 404 && path.startsWith("/catalog/")
+        ? " If the API is running, check that sourceCata.csv exists at C:\\Users\\user\\Downloads\\sourceCata.csv or set PRICEFETCHER_SOURCE_CATA_PATH."
+        : "";
+    const message = `Commerce API ${response.status} at ${path}: ${backendMessage}${setupHint}`;
+    throw new CommerceApiError(message, response.status, payload, path);
   }
 
   return payload as T;
