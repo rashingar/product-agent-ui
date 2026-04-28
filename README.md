@@ -144,6 +144,10 @@ npm run preview
 - This is a UI-only repo. Backend job logic stays in the backend.
 - The Catalog tab can browse commerce catalog products and preview/create Price Monitoring
   selection runs.
+- Catalog category paths are displayed as separate Family, Category, and Sub-Category fields.
+  Manufacturer filters use exact backend manufacturer values. Category backend filtering still
+  uses exact raw OpenCart category strings; partial family/category filtering needs backend
+  support later if full dataset server filtering is required.
 - The CSV/Bridge tab gets safe file roots from the commerce backend, opens CSV files through
   backend file APIs, and keeps edited CSV values as strings so values such as `005606` are
   preserved.

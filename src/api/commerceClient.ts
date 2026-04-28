@@ -3,6 +3,8 @@ import type {
   ApplyPriceMonitoringReviewActionsResult,
   BridgeRunBody,
   BridgeRunResponse,
+  CatalogBrandOption,
+  CatalogCategoryOption,
   CatalogProduct,
   CatalogProductsParams,
   CatalogProductsResponse,
@@ -421,6 +423,58 @@ async function request<T>(path: string, options: CommerceRequestOptions = {}): P
   return payload as T;
 }
 
+function normalizeCatalogCategoryOptions(payload: unknown): CatalogCategoryOption[] {
+  const list = getArrayPayload(payload, ["items", "categories", "data", "results"]);
+
+  return list
+    .map<CatalogCategoryOption | null>((item) => {
+      if (typeof item === "string" || typeof item === "number") {
+        return { category: String(item), count: null };
+      }
+
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const category = item.category ?? item.name ?? item.value;
+      if (typeof category !== "string" && typeof category !== "number") {
+        return null;
+      }
+
+      return {
+        category: String(category),
+        count: typeof item.count === "number" ? item.count : null,
+      };
+    })
+    .filter((item): item is CatalogCategoryOption => item !== null && item.category.length > 0);
+}
+
+function normalizeCatalogBrandOptions(payload: unknown): CatalogBrandOption[] {
+  const list = getArrayPayload(payload, ["items", "brands", "manufacturers", "data", "results"]);
+
+  return list
+    .map<CatalogBrandOption | null>((item) => {
+      if (typeof item === "string" || typeof item === "number") {
+        return { manufacturer: String(item), count: null };
+      }
+
+      if (!isRecord(item)) {
+        return null;
+      }
+
+      const manufacturer = item.manufacturer ?? item.brand ?? item.name ?? item.value;
+      if (typeof manufacturer !== "string" && typeof manufacturer !== "number") {
+        return null;
+      }
+
+      return {
+        manufacturer: String(manufacturer),
+        count: typeof item.count === "number" ? item.count : null,
+      };
+    })
+    .filter((item): item is CatalogBrandOption => item !== null && item.manufacturer.length > 0);
+}
+
 export const commerceClient = {
   commerceApiBaseUrl,
 
@@ -434,11 +488,23 @@ export const commerceClient = {
   },
 
   async listCatalogCategories(signal?: AbortSignal): Promise<string[]> {
-    return normalizeStringList(await request<unknown>("/catalog/categories", { signal }));
+    const payload = await request<unknown>("/catalog/categories", { signal });
+    const options = normalizeCatalogCategoryOptions(payload);
+    return options.length > 0 ? options.map((item) => item.category) : normalizeStringList(payload);
   },
 
   async listCatalogBrands(signal?: AbortSignal): Promise<string[]> {
-    return normalizeStringList(await request<unknown>("/catalog/brands", { signal }));
+    const payload = await request<unknown>("/catalog/brands", { signal });
+    const options = normalizeCatalogBrandOptions(payload);
+    return options.length > 0 ? options.map((item) => item.manufacturer) : normalizeStringList(payload);
+  },
+
+  async listCatalogCategoryOptions(signal?: AbortSignal): Promise<CatalogCategoryOption[]> {
+    return normalizeCatalogCategoryOptions(await request<unknown>("/catalog/categories", { signal }));
+  },
+
+  async listCatalogBrandOptions(signal?: AbortSignal): Promise<CatalogBrandOption[]> {
+    return normalizeCatalogBrandOptions(await request<unknown>("/catalog/brands", { signal }));
   },
 
   async getCatalogSummary(signal?: AbortSignal): Promise<CatalogSummary> {

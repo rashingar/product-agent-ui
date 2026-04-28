@@ -61,6 +61,16 @@ export interface CatalogSummary {
   [key: string]: unknown;
 }
 
+export interface CatalogCategoryOption {
+  category: string;
+  count?: number | null;
+}
+
+export interface CatalogBrandOption {
+  manufacturer: string;
+  count?: number | null;
+}
+
 export interface PriceMonitoringSelectionFilters {
   q: string | null;
   category: string | null;

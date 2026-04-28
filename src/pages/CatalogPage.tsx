@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { commerceClient, getCommerceApiErrorMessage } from "../api/commerceClient";
 import type {
+  CatalogBrandOption,
+  CatalogCategoryOption,
   CatalogProduct,
   CatalogProductsParams,
   CatalogProductsResponse,
@@ -11,8 +13,14 @@ import type {
   PriceMonitoringSource,
 } from "../api/commerceTypes";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
+import { parseOpenCartCategory } from "../utils/categoryPath";
+import type { ParsedOpenCartCategory } from "../utils/categoryPath";
 
 const DEFAULT_PAGE_SIZE = 100;
+
+interface CatalogCategoryFilterOption extends ParsedOpenCartCategory {
+  count: number | null;
+}
 
 function normalizeModel(model: string): string {
   return model.trim();
@@ -81,12 +89,37 @@ function getMarketplaceStatus(value: number | null | undefined): string {
   return formatValue(value);
 }
 
+function formatOptionCount(count: number | null | undefined): string {
+  return typeof count === "number" && Number.isFinite(count) ? ` (${count})` : "";
+}
+
+function toCategoryFilterOption(option: CatalogCategoryOption): CatalogCategoryFilterOption {
+  return {
+    ...parseOpenCartCategory(option.category),
+    count: typeof option.count === "number" ? option.count : null,
+  };
+}
+
+function aggregateCount(options: CatalogCategoryFilterOption[]): number | null {
+  const counts = options
+    .map((option) => option.count)
+    .filter((count): count is number => typeof count === "number" && Number.isFinite(count));
+
+  return counts.length > 0 ? counts.reduce((sum, count) => sum + count, 0) : null;
+}
+
+function getUniqueValues(values: string[]): string[] {
+  return Array.from(new Set(values.filter((value) => value.length > 0))).sort((a, b) =>
+    a.localeCompare(b),
+  );
+}
+
 function makeSelectionBody(
   source: PriceMonitoringSource,
   selectedModels: Set<string>,
   filters: {
     q: string;
-    category: string;
+    categoryRaw: string;
     manufacturer: string;
     marketplace: MarketplaceFilter;
     includeIgnored: boolean;
@@ -99,7 +132,7 @@ function makeSelectionBody(
     source,
     filters: {
       q: q.length > 0 ? q : null,
-      category: filters.category || null,
+      category: filters.categoryRaw || null,
       manufacturer: filters.manufacturer || null,
       marketplace: filters.marketplace === "all" ? null : filters.marketplace,
       has_mpn: true,
@@ -217,8 +250,8 @@ export function CatalogPage() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
 
-  const [categories, setCategories] = useState<string[]>([]);
-  const [brands, setBrands] = useState<string[]>([]);
+  const [categoryOptions, setCategoryOptions] = useState<CatalogCategoryFilterOption[]>([]);
+  const [brandOptions, setBrandOptions] = useState<CatalogBrandOption[]>([]);
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [areFiltersLoading, setAreFiltersLoading] = useState(true);
 
@@ -233,7 +266,9 @@ export function CatalogPage() {
   const [areProductsLoading, setAreProductsLoading] = useState(true);
 
   const [q, setQ] = useState("");
-  const [category, setCategory] = useState("");
+  const [selectedFamily, setSelectedFamily] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedSubCategory, setSelectedSubCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [marketplace, setMarketplace] = useState<MarketplaceFilter>("all");
   const [source, setSource] = useState<PriceMonitoringSource>("skroutz");
@@ -274,41 +309,164 @@ export function CatalogPage() {
 
   const loadFilterOptions = useCallback(async (signal?: AbortSignal) => {
     setAreFiltersLoading(true);
-    try {
-      const [nextCategories, nextBrands] = await Promise.all([
-        commerceClient.listCatalogCategories(signal),
-        commerceClient.listCatalogBrands(signal),
-      ]);
-      if (signal?.aborted) {
-        return;
-      }
+    const [nextCategories, nextBrands] = await Promise.allSettled([
+      commerceClient.listCatalogCategoryOptions(signal),
+      commerceClient.listCatalogBrandOptions(signal),
+    ]);
 
-      setCategories(nextCategories);
-      setBrands(nextBrands);
-      setFiltersError(null);
-    } catch (error) {
-      if (!signal?.aborted) {
-        setFiltersError(getCommerceApiErrorMessage(error));
-      }
-    } finally {
-      if (!signal?.aborted) {
-        setAreFiltersLoading(false);
-      }
+    if (signal?.aborted) {
+      return;
     }
+
+    const errors: string[] = [];
+    if (nextCategories.status === "fulfilled") {
+      setCategoryOptions(nextCategories.value.map(toCategoryFilterOption));
+    } else {
+      setCategoryOptions([]);
+      errors.push(`Could not load category hierarchy: ${getCommerceApiErrorMessage(nextCategories.reason)}`);
+    }
+
+    if (nextBrands.status === "fulfilled") {
+      setBrandOptions(
+        nextBrands.value
+          .filter((option) => option.manufacturer.trim().length > 0)
+          .map((option) => ({
+            manufacturer: option.manufacturer.trim(),
+            count: option.count,
+          })),
+      );
+    } else {
+      setBrandOptions([]);
+      errors.push(`Could not load manufacturers: ${getCommerceApiErrorMessage(nextBrands.reason)}`);
+    }
+
+    setFiltersError(errors.length > 0 ? errors.join(" ") : null);
+    setAreFiltersLoading(false);
   }, []);
 
+  const matchingCategoryOptions = useMemo(
+    () =>
+      categoryOptions.filter((option) => {
+        if (selectedFamily && option.family !== selectedFamily) {
+          return false;
+        }
+
+        if (selectedCategory && option.category !== selectedCategory) {
+          return false;
+        }
+
+        if (selectedSubCategory && option.subCategory !== selectedSubCategory) {
+          return false;
+        }
+
+        return true;
+      }),
+    [categoryOptions, selectedCategory, selectedFamily, selectedSubCategory],
+  );
+
+  const exactCategoryRaw = useMemo(() => {
+    if (!selectedFamily && !selectedCategory && !selectedSubCategory) {
+      return "";
+    }
+
+    const rawValues = Array.from(new Set(matchingCategoryOptions.map((option) => option.raw)));
+    return rawValues.length === 1 ? rawValues[0] : "";
+  }, [matchingCategoryOptions, selectedCategory, selectedFamily, selectedSubCategory]);
+
+  const familyOptions = useMemo(
+    () =>
+      getUniqueValues(categoryOptions.map((option) => option.family)).map((family) => ({
+        value: family,
+        count: aggregateCount(categoryOptions.filter((option) => option.family === family)),
+      })),
+    [categoryOptions],
+  );
+
+  const categoryLevelOptions = useMemo(
+    () =>
+      getUniqueValues(
+        categoryOptions
+          .filter((option) => !selectedFamily || option.family === selectedFamily)
+          .map((option) => option.category),
+      ).map((categoryName) => ({
+        value: categoryName,
+        count: aggregateCount(
+          categoryOptions.filter(
+            (option) =>
+              (!selectedFamily || option.family === selectedFamily) &&
+              option.category === categoryName,
+          ),
+        ),
+      })),
+    [categoryOptions, selectedFamily],
+  );
+
+  const subCategoryOptions = useMemo(
+    () =>
+      getUniqueValues(
+        categoryOptions
+          .filter(
+            (option) =>
+              (!selectedFamily || option.family === selectedFamily) &&
+              (!selectedCategory || option.category === selectedCategory),
+          )
+          .map((option) => option.subCategory),
+      ).map((subCategory) => ({
+        value: subCategory,
+        count: aggregateCount(
+          categoryOptions.filter(
+            (option) =>
+              (!selectedFamily || option.family === selectedFamily) &&
+              (!selectedCategory || option.category === selectedCategory) &&
+              option.subCategory === subCategory,
+          ),
+        ),
+      })),
+    [categoryOptions, selectedCategory, selectedFamily],
+  );
+
+  const categoryFilterNote = useMemo(() => {
+    if (!selectedFamily && !selectedCategory && !selectedSubCategory) {
+      return null;
+    }
+
+    if (exactCategoryRaw) {
+      return "Exact backend category filtering is active for one OpenCart category path.";
+    }
+
+    return "Select a sub-category for exact server filtering.";
+  }, [exactCategoryRaw, selectedCategory, selectedFamily, selectedSubCategory]);
+
   const productParams = useMemo<CatalogProductsParams>(
-    () => ({
-      q: q.trim() || null,
-      category: category || null,
-      manufacturer: manufacturer || null,
-      marketplace,
-      page,
-      page_size: pageSize,
-      atomic_only: !showComposite,
-      ignored: includeIgnored ? "include" : "exclude",
-    }),
-    [category, includeIgnored, manufacturer, marketplace, page, pageSize, q, showComposite],
+    () => {
+      const trimmedQ = q.trim();
+      const trimmedManufacturer = manufacturer.trim();
+      const params: CatalogProductsParams = {
+        page,
+        page_size: pageSize,
+        atomic_only: !showComposite,
+        ignored: includeIgnored ? "include" : "exclude",
+      };
+
+      if (trimmedQ.length > 0) {
+        params.q = trimmedQ;
+      }
+
+      if (exactCategoryRaw) {
+        params.category = exactCategoryRaw;
+      }
+
+      if (trimmedManufacturer.length > 0) {
+        params.manufacturer = trimmedManufacturer;
+      }
+
+      if (marketplace !== "all") {
+        params.marketplace = marketplace;
+      }
+
+      return params;
+    },
+    [exactCategoryRaw, includeIgnored, manufacturer, marketplace, page, pageSize, q, showComposite],
   );
 
   const loadProducts = useCallback(
@@ -353,7 +511,18 @@ export function CatalogPage() {
     setSelectedModels(new Set());
     setPreviewResult(null);
     setRunResult(null);
-  }, [category, includeIgnored, manufacturer, marketplace, pageSize, q, showComposite]);
+  }, [
+    exactCategoryRaw,
+    includeIgnored,
+    manufacturer,
+    marketplace,
+    pageSize,
+    q,
+    selectedCategory,
+    selectedFamily,
+    selectedSubCategory,
+    showComposite,
+  ]);
 
   const eligibleVisibleModels = useMemo(
     () =>
@@ -405,7 +574,7 @@ export function CatalogPage() {
     makeSelectionBody(
       source,
       selectedModels,
-      { q, category, manufacturer, marketplace, includeIgnored },
+      { q, categoryRaw: exactCategoryRaw, manufacturer, marketplace, includeIgnored },
       dryRun,
     );
 
@@ -524,12 +693,57 @@ export function CatalogPage() {
           </label>
 
           <label>
+            Family
+            <select
+              value={selectedFamily}
+              onChange={(event) => {
+                setSelectedFamily(event.target.value);
+                setSelectedCategory("");
+                setSelectedSubCategory("");
+              }}
+            >
+              <option value="">All families</option>
+              {familyOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.value}
+                  {formatOptionCount(item.count)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
             Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            <select
+              value={selectedCategory}
+              onChange={(event) => {
+                setSelectedCategory(event.target.value);
+                setSelectedSubCategory("");
+              }}
+              disabled={!selectedFamily && categoryLevelOptions.length === 0}
+            >
               <option value="">All categories</option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {categoryLevelOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.value}
+                  {formatOptionCount(item.count)}
+                </option>
+              ))}
+            </select>
+          </label>
+
+          <label>
+            Sub-Category
+            <select
+              value={selectedSubCategory}
+              onChange={(event) => setSelectedSubCategory(event.target.value)}
+              disabled={!selectedCategory && subCategoryOptions.length === 0}
+            >
+              <option value="">All sub-categories</option>
+              {subCategoryOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {item.value}
+                  {formatOptionCount(item.count)}
                 </option>
               ))}
             </select>
@@ -537,11 +751,12 @@ export function CatalogPage() {
 
           <label>
             Manufacturer
-            <select value={manufacturer} onChange={(event) => setManufacturer(event.target.value)}>
+            <select value={manufacturer} onChange={(event) => setManufacturer(event.target.value.trim())}>
               <option value="">All manufacturers</option>
-              {brands.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {brandOptions.map((item) => (
+                <option key={item.manufacturer} value={item.manufacturer}>
+                  {item.manufacturer}
+                  {formatOptionCount(item.count)}
                 </option>
               ))}
             </select>
@@ -602,6 +817,12 @@ export function CatalogPage() {
             Include ignored
           </label>
         </div>
+
+        <p className="muted">
+          Family/Category split is parsed from OpenCart category paths. Exact backend filtering is
+          applied when the selection resolves to a single category path.
+          {categoryFilterNote ? ` ${categoryFilterNote}` : ""}
+        </p>
 
         <div className="toolbar">
           <p className="muted">
@@ -672,7 +893,9 @@ export function CatalogPage() {
                     </th>
                     <th>Model</th>
                     <th>Name</th>
+                    <th>Family</th>
                     <th>Category</th>
+                    <th>Sub-Category</th>
                     <th>Manufacturer</th>
                     <th>MPN</th>
                     <th>Price</th>
@@ -689,6 +912,7 @@ export function CatalogPage() {
                     const selectionBlocker = getSelectionBlocker(product);
                     const isSelected = selectedModels.has(model);
                     const warnings = Array.isArray(product.warnings) ? product.warnings : [];
+                    const parsedCategory = parseOpenCartCategory(product.category);
 
                     return (
                       <tr key={model}>
@@ -703,7 +927,9 @@ export function CatalogPage() {
                         </td>
                         <td className="nowrap-cell">{model}</td>
                         <td>{formatValue(product.name)}</td>
-                        <td>{formatValue(product.category)}</td>
+                        <td>{formatValue(parsedCategory.family)}</td>
+                        <td>{formatValue(parsedCategory.category)}</td>
+                        <td>{formatValue(parsedCategory.subCategory)}</td>
                         <td>{formatValue(product.manufacturer)}</td>
                         <td>{formatValue(product.mpn)}</td>
                         <td className="nowrap-cell">{formatMoney(product.price)}</td>
