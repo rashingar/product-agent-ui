@@ -6,6 +6,8 @@ import {
 } from "../api/commerceClient";
 import type {
   ApplyPriceMonitoringReviewActionsResult,
+  CatalogBrandOption,
+  CatalogCategoryHierarchyResponse,
   ExportPriceMonitoringPriceUpdateResult,
   FetchPriceMonitoringResult,
   MarketplaceFilter,
@@ -20,6 +22,14 @@ import type {
   PriceMonitoringSource,
 } from "../api/commerceTypes";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
+import {
+  CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE,
+  formatHierarchyOptionLabel,
+  getCategoryOptions,
+  getFamilyOptions,
+  getSubCategoryOptions,
+  makeHierarchyFilterParams,
+} from "../utils/categoryHierarchy";
 
 type SourceOverride = "" | PriceMonitoringSource;
 
@@ -71,7 +81,9 @@ function isAction(value: unknown): value is PriceMonitoringAction {
 function makeSelectionBody({
   source,
   q,
-  category,
+  family,
+  categoryName,
+  subCategory,
   manufacturer,
   marketplace,
   selectedModelText,
@@ -84,7 +96,9 @@ function makeSelectionBody({
 }: {
   source: PriceMonitoringSource;
   q: string;
-  category: string;
+  family: string;
+  categoryName: string;
+  subCategory: string;
   manufacturer: string;
   marketplace: MarketplaceFilter;
   selectedModelText: string;
@@ -101,7 +115,7 @@ function makeSelectionBody({
     source,
     filters: {
       q: trimmedQ.length > 0 ? trimmedQ : null,
-      category: category || null,
+      ...makeHierarchyFilterParams({ family, categoryName, subCategory }),
       manufacturer: manufacturer || null,
       marketplace: marketplace === "all" ? null : marketplace,
       has_mpn: hasMpn,
@@ -113,6 +127,96 @@ function makeSelectionBody({
     include_ignored: includeIgnored,
     dry_run: dryRun,
   };
+}
+
+function getCategoryHierarchyErrorMessage(error: unknown): string {
+  return error instanceof CommerceApiError && error.status === 404
+    ? CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE
+    : getCommerceApiErrorMessage(error);
+}
+
+function formatOptionCount(count: number | null | undefined): string {
+  return typeof count === "number" && Number.isFinite(count) ? ` (${count})` : "";
+}
+
+interface SelectionHierarchyFilters {
+  family?: string | null;
+  category_name?: string | null;
+  sub_category?: string | null;
+  category?: string | null;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asStringFilter(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value : null;
+}
+
+function getRecordValue(source: unknown, key: string): unknown {
+  return isRecord(source) ? source[key] : undefined;
+}
+
+function parseRecord(value: unknown): Record<string, unknown> | null {
+  if (isRecord(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+function extractSelectionFilters(
+  run: PriceMonitoringRun | PriceMonitoringSelectionResult,
+): SelectionHierarchyFilters {
+  const directFilters = parseRecord(getRecordValue(run, "filters"));
+  const selectionSummary = parseRecord(getRecordValue(run, "selection_summary"));
+  const summaryFilters = parseRecord(getRecordValue(selectionSummary, "filters"));
+  const selectionSummaryJson = parseRecord(getRecordValue(run, "selection_summary_json"));
+  const jsonFilters = parseRecord(getRecordValue(selectionSummaryJson, "filters"));
+  const filters = summaryFilters
+    ? summaryFilters
+    : jsonFilters
+      ? jsonFilters
+      : directFilters
+        ? directFilters
+        : {};
+
+  return {
+    family: asStringFilter(filters.family),
+    category_name: asStringFilter(filters.category_name),
+    sub_category: asStringFilter(filters.sub_category),
+    category: asStringFilter(filters.category),
+  };
+}
+
+function HierarchyFilterSummary({
+  filters,
+}: {
+  filters: SelectionHierarchyFilters;
+}) {
+  return (
+    <div className="compact-list">
+      <strong>Hierarchy filters</strong>
+      <dl className="summary-grid">
+        <SummaryItem label="Family" value={filters.family || "All"} />
+        <SummaryItem label="Category" value={filters.category_name || "All"} />
+        <SummaryItem label="Sub-Category" value={filters.sub_category || "All"} />
+      </dl>
+      {!filters.family && !filters.category_name && !filters.sub_category && filters.category ? (
+        <p className="muted">Raw category: {filters.category}</p>
+      ) : null}
+    </div>
+  );
 }
 
 function getRunId(run: PriceMonitoringRun | PriceMonitoringSelectionResult | null): string {
@@ -180,8 +284,15 @@ function getActionError(row: PriceMonitoringReviewItem, state: RowActionState): 
   return null;
 }
 
-function SelectionResultBlock({ result }: { result: PriceMonitoringSelectionResult }) {
+function SelectionResultBlock({
+  result,
+  filters,
+}: {
+  result: PriceMonitoringSelectionResult;
+  filters?: SelectionHierarchyFilters | null;
+}) {
   const selectedItems = getSelectedItems(result);
+  const hierarchyFilters = filters ?? extractSelectionFilters(result);
 
   return (
     <div className="state-block">
@@ -196,6 +307,8 @@ function SelectionResultBlock({ result }: { result: PriceMonitoringSelectionResu
         <SummaryItem label="Selected" value={result.selected_count} />
         <SummaryItem label="Skipped" value={result.skipped_count} />
       </dl>
+
+      <HierarchyFilterSummary filters={hierarchyFilters} />
 
       {result.skipped_by_reason ? (
         <div className="compact-list">
@@ -218,7 +331,9 @@ function SelectionResultBlock({ result }: { result: PriceMonitoringSelectionResu
                 <th>Model</th>
                 <th>Name</th>
                 <th>MPN</th>
+                <th>Family</th>
                 <th>Category</th>
+                <th>Sub-Category</th>
                 <th>Manufacturer</th>
               </tr>
             </thead>
@@ -228,7 +343,9 @@ function SelectionResultBlock({ result }: { result: PriceMonitoringSelectionResu
                   <td>{formatValue(item.model)}</td>
                   <td>{formatValue(item.name)}</td>
                   <td>{formatValue(item.mpn)}</td>
-                  <td>{formatValue(item.category)}</td>
+                  <td>{formatValue(item.family)}</td>
+                  <td>{formatValue(item.category_name)}</td>
+                  <td>{formatValue(item.sub_category)}</td>
                   <td>{formatValue(item.manufacturer)}</td>
                 </tr>
               ))}
@@ -243,7 +360,15 @@ function SelectionResultBlock({ result }: { result: PriceMonitoringSelectionResu
   );
 }
 
-function RunSummaryBlock({ run }: { run: PriceMonitoringRun | PriceMonitoringSelectionResult }) {
+function RunSummaryBlock({
+  run,
+  filters,
+}: {
+  run: PriceMonitoringRun | PriceMonitoringSelectionResult;
+  filters?: SelectionHierarchyFilters | null;
+}) {
+  const hierarchyFilters = filters ?? extractSelectionFilters(run);
+
   return (
     <div className="state-block">
       <strong>Current run</strong>
@@ -257,6 +382,7 @@ function RunSummaryBlock({ run }: { run: PriceMonitoringRun | PriceMonitoringSel
         <SummaryItem label="Selected" value={run.selected_count} />
         <SummaryItem label="Skipped" value={run.skipped_count} />
       </dl>
+      <HierarchyFilterSummary filters={hierarchyFilters} />
       {run.skipped_by_reason ? (
         <div className="compact-list">
           <strong>Skipped by reason</strong>
@@ -356,13 +482,16 @@ function PriceMonitoringSetupHint() {
 }
 
 export function PriceMonitoringPage() {
-  const [categories, setCategories] = useState<string[]>([]);
-  const [brands, setBrands] = useState<string[]>([]);
+  const [categoryHierarchy, setCategoryHierarchy] =
+    useState<CatalogCategoryHierarchyResponse | null>(null);
+  const [brands, setBrands] = useState<CatalogBrandOption[]>([]);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [areFiltersLoading, setAreFiltersLoading] = useState(true);
 
   const [source, setSource] = useState<PriceMonitoringSource>("skroutz");
-  const [category, setCategory] = useState("");
+  const [selectedFamily, setSelectedFamily] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("");
+  const [selectedSubCategory, setSelectedSubCategory] = useState("");
   const [manufacturer, setManufacturer] = useState("");
   const [marketplace, setMarketplace] = useState<MarketplaceFilter>("all");
   const [q, setQ] = useState("");
@@ -374,15 +503,18 @@ export function PriceMonitoringPage() {
   const [hasMpn, setHasMpn] = useState(true);
 
   const [previewResult, setPreviewResult] = useState<PriceMonitoringSelectionResult | null>(null);
+  const [previewFilters, setPreviewFilters] = useState<SelectionHierarchyFilters | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const [createResult, setCreateResult] = useState<PriceMonitoringSelectionResult | null>(null);
+  const [createFilters, setCreateFilters] = useState<SelectionHierarchyFilters | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreateLoading, setIsCreateLoading] = useState(false);
 
   const [currentRunId, setCurrentRunId] = useState("");
   const [currentRun, setCurrentRun] = useState<PriceMonitoringRun | PriceMonitoringSelectionResult | null>(null);
+  const [currentRunFilters, setCurrentRunFilters] = useState<SelectionHierarchyFilters | null>(null);
   const [runs, setRuns] = useState<PriceMonitoringRun[]>([]);
   const [runListMessage, setRunListMessage] = useState<string | null>(null);
   const [isRunsLoading, setIsRunsLoading] = useState(false);
@@ -415,27 +547,38 @@ export function PriceMonitoringPage() {
 
   const loadFilters = useCallback(async (signal?: AbortSignal) => {
     setAreFiltersLoading(true);
-    try {
-      const [nextCategories, nextBrands] = await Promise.all([
-        commerceClient.listCatalogCategories(signal),
-        commerceClient.listCatalogBrands(signal),
-      ]);
-      if (signal?.aborted) {
-        return;
-      }
-
-      setCategories(nextCategories);
-      setBrands(nextBrands);
-      setFilterError(null);
-    } catch (error) {
-      if (!signal?.aborted) {
-        setFilterError(getCommerceApiErrorMessage(error));
-      }
-    } finally {
-      if (!signal?.aborted) {
-        setAreFiltersLoading(false);
-      }
+    const [nextHierarchy, nextBrands] = await Promise.allSettled([
+      commerceClient.getCatalogCategoryHierarchy(signal),
+      commerceClient.listCatalogBrandOptions(signal),
+    ]);
+    if (signal?.aborted) {
+      return;
     }
+
+    const errors: string[] = [];
+    if (nextHierarchy.status === "fulfilled") {
+      setCategoryHierarchy(nextHierarchy.value);
+    } else {
+      setCategoryHierarchy(null);
+      errors.push(getCategoryHierarchyErrorMessage(nextHierarchy.reason));
+    }
+
+    if (nextBrands.status === "fulfilled") {
+      setBrands(
+        nextBrands.value
+          .filter((option) => option.manufacturer.trim().length > 0)
+          .map((option) => ({
+            manufacturer: option.manufacturer.trim(),
+            count: option.count,
+          })),
+      );
+    } else {
+      setBrands([]);
+      errors.push(`Could not load manufacturers: ${getCommerceApiErrorMessage(nextBrands.reason)}`);
+    }
+
+    setFilterError(errors.length > 0 ? errors.join(" ") : null);
+    setAreFiltersLoading(false);
   }, []);
 
   const loadRuns = useCallback(async (signal?: AbortSignal) => {
@@ -475,7 +618,9 @@ export function PriceMonitoringPage() {
     makeSelectionBody({
       source,
       q,
-      category,
+      family: selectedFamily,
+      categoryName: selectedCategory,
+      subCategory: selectedSubCategory,
       manufacturer,
       marketplace,
       selectedModelText,
@@ -487,13 +632,40 @@ export function PriceMonitoringPage() {
       dryRun,
     });
 
+  const selectedHierarchyFilters = useMemo<SelectionHierarchyFilters>(
+    () => ({
+      family: selectedFamily || null,
+      category_name: selectedCategory || null,
+      sub_category: selectedSubCategory || null,
+    }),
+    [selectedCategory, selectedFamily, selectedSubCategory],
+  );
+
+  const familyOptions = useMemo(
+    () => getFamilyOptions(categoryHierarchy),
+    [categoryHierarchy],
+  );
+
+  const categoryOptions = useMemo(
+    () => getCategoryOptions(categoryHierarchy, selectedFamily),
+    [categoryHierarchy, selectedFamily],
+  );
+
+  const subCategoryOptions = useMemo(
+    () => getSubCategoryOptions(categoryHierarchy, selectedFamily, selectedCategory),
+    [categoryHierarchy, selectedCategory, selectedFamily],
+  );
+
   const previewSelection = async () => {
+    const hierarchyFilterSnapshot = selectedHierarchyFilters;
     setIsPreviewLoading(true);
     setPreviewError(null);
     setPreviewResult(null);
+    setPreviewFilters(null);
     try {
       const result = await commerceClient.previewPriceMonitoringSelection(buildSelectionBody(true));
       setPreviewResult(result);
+      setPreviewFilters(hierarchyFilterSnapshot);
     } catch (error) {
       setPreviewError(getCommerceApiErrorMessage(error));
     } finally {
@@ -502,14 +674,18 @@ export function PriceMonitoringPage() {
   };
 
   const createRun = async () => {
+    const hierarchyFilterSnapshot = selectedHierarchyFilters;
     setIsCreateLoading(true);
     setCreateError(null);
     setCreateResult(null);
+    setCreateFilters(null);
     try {
       const result = await commerceClient.createPriceMonitoringRun(buildSelectionBody(false));
       const runId = result.run_id === null || result.run_id === undefined ? "" : String(result.run_id);
       setCreateResult(result);
+      setCreateFilters(hierarchyFilterSnapshot);
       setCurrentRun(result);
+      setCurrentRunFilters(hierarchyFilterSnapshot);
       if (runId) {
         setCurrentRunId(runId);
       }
@@ -531,6 +707,7 @@ export function PriceMonitoringPage() {
     try {
       const run = await commerceClient.getPriceMonitoringRun(runId);
       setCurrentRun(run);
+      setCurrentRunFilters(null);
       setCurrentRunId(runId);
     } catch (error) {
       const message =
@@ -788,12 +965,52 @@ export function PriceMonitoringPage() {
             </select>
           </label>
           <label>
+            Family
+            <select
+              value={selectedFamily}
+              onChange={(event) => {
+                setSelectedFamily(event.target.value);
+                setSelectedCategory("");
+                setSelectedSubCategory("");
+              }}
+            >
+              <option value="">All families</option>
+              {familyOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {formatHierarchyOptionLabel(item)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
             Category
-            <select value={category} onChange={(event) => setCategory(event.target.value)}>
+            <select
+              value={selectedCategory}
+              onChange={(event) => {
+                setSelectedCategory(event.target.value);
+                setSelectedSubCategory("");
+              }}
+              disabled={!selectedFamily}
+            >
               <option value="">All categories</option>
-              {categories.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+              {categoryOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {formatHierarchyOptionLabel(item)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Sub-Category
+            <select
+              value={selectedSubCategory}
+              onChange={(event) => setSelectedSubCategory(event.target.value)}
+              disabled={!selectedFamily || !selectedCategory}
+            >
+              <option value="">All sub-categories</option>
+              {subCategoryOptions.map((item) => (
+                <option key={item.value} value={item.value}>
+                  {formatHierarchyOptionLabel(item)}
                 </option>
               ))}
             </select>
@@ -803,8 +1020,9 @@ export function PriceMonitoringPage() {
             <select value={manufacturer} onChange={(event) => setManufacturer(event.target.value)}>
               <option value="">All manufacturers</option>
               {brands.map((item) => (
-                <option key={item} value={item}>
-                  {item}
+                <option key={item.manufacturer} value={item.manufacturer}>
+                  {item.manufacturer}
+                  {formatOptionCount(item.count)}
                 </option>
               ))}
             </select>
@@ -899,14 +1117,18 @@ export function PriceMonitoringPage() {
             <PriceMonitoringSetupHint />
           </>
         ) : null}
-        {previewResult ? <SelectionResultBlock result={previewResult} /> : null}
+        {previewResult ? (
+          <SelectionResultBlock result={previewResult} filters={previewFilters} />
+        ) : null}
         {createError ? (
           <>
             <ErrorState message={createError} />
             <PriceMonitoringSetupHint />
           </>
         ) : null}
-        {createResult ? <SelectionResultBlock result={createResult} /> : null}
+        {createResult ? (
+          <SelectionResultBlock result={createResult} filters={createFilters} />
+        ) : null}
       </section>
 
       <section className="panel">
@@ -980,7 +1202,7 @@ export function PriceMonitoringPage() {
           </div>
         ) : null}
 
-        {currentRun ? <RunSummaryBlock run={currentRun} /> : null}
+        {currentRun ? <RunSummaryBlock run={currentRun} filters={currentRunFilters} /> : null}
       </section>
 
       <section className="panel">

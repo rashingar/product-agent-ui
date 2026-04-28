@@ -763,6 +763,24 @@ code {
   min-width: 160px;
 }
 
+.raw-category-detail {
+  max-width: 320px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.raw-category-detail summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.raw-category-detail span {
+  display: block;
+  margin-top: 4px;
+  overflow-wrap: anywhere;
+}
+
 .json-block {
   max-width: 100%;
   overflow: auto;

@@ -4,10 +4,14 @@ import type {
   BridgeRunBody,
   BridgeRunResponse,
   CatalogBrandOption,
+  CatalogCategoryHierarchyResponse,
+  CatalogCategoryNode,
   CatalogCategoryOption,
+  CatalogFamilyNode,
   CatalogProduct,
   CatalogProductsParams,
   CatalogProductsResponse,
+  CatalogSubCategoryNode,
   CatalogSummary,
   ExportPriceMonitoringPriceUpdateBody,
   ExportPriceMonitoringPriceUpdateResult,
@@ -449,6 +453,69 @@ function normalizeCatalogCategoryOptions(payload: unknown): CatalogCategoryOptio
     .filter((item): item is CatalogCategoryOption => item !== null && item.category.length > 0);
 }
 
+function normalizeCatalogSubCategoryNode(value: unknown): CatalogSubCategoryNode | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const subCategory = value.sub_category ?? value.name ?? value.value ?? "";
+  if (typeof subCategory !== "string" && typeof subCategory !== "number") {
+    return null;
+  }
+
+  return {
+    sub_category: String(subCategory),
+    count: typeof value.count === "number" ? value.count : null,
+    raw_categories: normalizeStringArray(value.raw_categories),
+  };
+}
+
+function normalizeCatalogCategoryNode(value: unknown): CatalogCategoryNode | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const categoryName = value.category_name ?? value.category ?? value.name ?? value.value;
+  if (typeof categoryName !== "string" && typeof categoryName !== "number") {
+    return null;
+  }
+
+  return {
+    category_name: String(categoryName),
+    count: typeof value.count === "number" ? value.count : null,
+    sub_categories: getArrayPayload(value.sub_categories, ["items", "data", "results"])
+      .map(normalizeCatalogSubCategoryNode)
+      .filter((item): item is CatalogSubCategoryNode => item !== null),
+  };
+}
+
+function normalizeCatalogFamilyNode(value: unknown): CatalogFamilyNode | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const family = value.family ?? value.name ?? value.value;
+  if (typeof family !== "string" && typeof family !== "number") {
+    return null;
+  }
+
+  return {
+    family: String(family),
+    count: typeof value.count === "number" ? value.count : null,
+    categories: getArrayPayload(value.categories, ["items", "data", "results"])
+      .map(normalizeCatalogCategoryNode)
+      .filter((item): item is CatalogCategoryNode => item !== null),
+  };
+}
+
+function normalizeCatalogCategoryHierarchy(payload: unknown): CatalogCategoryHierarchyResponse {
+  return {
+    items: getArrayPayload(payload, ["items", "families", "data", "results"])
+      .map(normalizeCatalogFamilyNode)
+      .filter((item): item is CatalogFamilyNode => item !== null && item.family.trim().length > 0),
+  };
+}
+
 function normalizeCatalogBrandOptions(payload: unknown): CatalogBrandOption[] {
   const list = getArrayPayload(payload, ["items", "brands", "manufacturers", "data", "results"]);
 
@@ -501,6 +568,12 @@ export const commerceClient = {
 
   async listCatalogCategoryOptions(signal?: AbortSignal): Promise<CatalogCategoryOption[]> {
     return normalizeCatalogCategoryOptions(await request<unknown>("/catalog/categories", { signal }));
+  },
+
+  async getCatalogCategoryHierarchy(signal?: AbortSignal): Promise<CatalogCategoryHierarchyResponse> {
+    return normalizeCatalogCategoryHierarchy(
+      await request<unknown>("/catalog/category-hierarchy", { signal }),
+    );
   },
 
   async listCatalogBrandOptions(signal?: AbortSignal): Promise<CatalogBrandOption[]> {

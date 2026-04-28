@@ -9,6 +9,11 @@ export interface CatalogProduct {
   mpn?: string | null;
   name?: string | null;
   category?: string | null;
+  raw_category?: string | null;
+  family?: string | null;
+  category_name?: string | null;
+  sub_category?: string | null;
+  category_levels?: string[] | null;
   manufacturer?: string | null;
   price?: number | null;
   quantity?: number | null;
@@ -33,6 +38,9 @@ export interface CatalogProductsResponse {
 export interface CatalogProductsParams {
   q?: string | null;
   category?: string | null;
+  family?: string | null;
+  category_name?: string | null;
+  sub_category?: string | null;
   manufacturer?: string | null;
   marketplace?: MarketplaceFilter | null;
   page?: number;
@@ -66,6 +74,28 @@ export interface CatalogCategoryOption {
   count?: number | null;
 }
 
+export interface CatalogSubCategoryNode {
+  sub_category: string;
+  count?: number | null;
+  raw_categories?: string[] | null;
+}
+
+export interface CatalogCategoryNode {
+  category_name: string;
+  count?: number | null;
+  sub_categories?: CatalogSubCategoryNode[] | null;
+}
+
+export interface CatalogFamilyNode {
+  family: string;
+  count?: number | null;
+  categories?: CatalogCategoryNode[] | null;
+}
+
+export interface CatalogCategoryHierarchyResponse {
+  items: CatalogFamilyNode[];
+}
+
 export interface CatalogBrandOption {
   manufacturer: string;
   count?: number | null;
@@ -73,7 +103,10 @@ export interface CatalogBrandOption {
 
 export interface PriceMonitoringSelectionFilters {
   q: string | null;
-  category: string | null;
+  category?: string | null;
+  family?: string | null;
+  category_name?: string | null;
+  sub_category?: string | null;
   manufacturer: string | null;
   marketplace: Exclude<MarketplaceFilter, "all"> | null;
   has_mpn: boolean;
@@ -95,6 +128,10 @@ export interface PriceMonitoringSelectionItem {
   name?: string;
   mpn?: string | null;
   category?: string | null;
+  raw_category?: string | null;
+  family?: string | null;
+  category_name?: string | null;
+  sub_category?: string | null;
   manufacturer?: string | null;
   [key: string]: unknown;
 }

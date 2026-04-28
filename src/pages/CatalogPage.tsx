@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { commerceClient, getCommerceApiErrorMessage } from "../api/commerceClient";
+import {
+  CommerceApiError,
+  commerceClient,
+  getCommerceApiErrorMessage,
+} from "../api/commerceClient";
 import type {
   CatalogBrandOption,
-  CatalogCategoryOption,
+  CatalogCategoryHierarchyResponse,
   CatalogProduct,
   CatalogProductsParams,
   CatalogProductsResponse,
@@ -13,14 +17,16 @@ import type {
   PriceMonitoringSource,
 } from "../api/commerceTypes";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
-import { parseOpenCartCategory } from "../utils/categoryPath";
-import type { ParsedOpenCartCategory } from "../utils/categoryPath";
+import {
+  CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE,
+  formatHierarchyOptionLabel,
+  getCategoryOptions,
+  getFamilyOptions,
+  getSubCategoryOptions,
+  makeHierarchyFilterParams,
+} from "../utils/categoryHierarchy";
 
 const DEFAULT_PAGE_SIZE = 100;
-
-interface CatalogCategoryFilterOption extends ParsedOpenCartCategory {
-  count: number | null;
-}
 
 function normalizeModel(model: string): string {
   return model.trim();
@@ -93,33 +99,14 @@ function formatOptionCount(count: number | null | undefined): string {
   return typeof count === "number" && Number.isFinite(count) ? ` (${count})` : "";
 }
 
-function toCategoryFilterOption(option: CatalogCategoryOption): CatalogCategoryFilterOption {
-  return {
-    ...parseOpenCartCategory(option.category),
-    count: typeof option.count === "number" ? option.count : null,
-  };
-}
-
-function aggregateCount(options: CatalogCategoryFilterOption[]): number | null {
-  const counts = options
-    .map((option) => option.count)
-    .filter((count): count is number => typeof count === "number" && Number.isFinite(count));
-
-  return counts.length > 0 ? counts.reduce((sum, count) => sum + count, 0) : null;
-}
-
-function getUniqueValues(values: string[]): string[] {
-  return Array.from(new Set(values.filter((value) => value.length > 0))).sort((a, b) =>
-    a.localeCompare(b),
-  );
-}
-
 function makeSelectionBody(
   source: PriceMonitoringSource,
   selectedModels: Set<string>,
   filters: {
     q: string;
-    categoryRaw: string;
+    family: string;
+    categoryName: string;
+    subCategory: string;
     manufacturer: string;
     marketplace: MarketplaceFilter;
     includeIgnored: boolean;
@@ -132,7 +119,11 @@ function makeSelectionBody(
     source,
     filters: {
       q: q.length > 0 ? q : null,
-      category: filters.categoryRaw || null,
+      ...makeHierarchyFilterParams({
+        family: filters.family,
+        categoryName: filters.categoryName,
+        subCategory: filters.subCategory,
+      }),
       manufacturer: filters.manufacturer || null,
       marketplace: filters.marketplace === "all" ? null : filters.marketplace,
       has_mpn: true,
@@ -159,6 +150,12 @@ function SummaryCard({
       <dd>{value === null ? "-" : value.toLocaleString()}</dd>
     </div>
   );
+}
+
+function getCategoryHierarchyErrorMessage(error: unknown): string {
+  return error instanceof CommerceApiError && error.status === 404
+    ? CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE
+    : getCommerceApiErrorMessage(error);
 }
 
 function ResultSummary({ result }: { result: PriceMonitoringSelectionResult }) {
@@ -250,7 +247,8 @@ export function CatalogPage() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
 
-  const [categoryOptions, setCategoryOptions] = useState<CatalogCategoryFilterOption[]>([]);
+  const [categoryHierarchy, setCategoryHierarchy] =
+    useState<CatalogCategoryHierarchyResponse | null>(null);
   const [brandOptions, setBrandOptions] = useState<CatalogBrandOption[]>([]);
   const [filtersError, setFiltersError] = useState<string | null>(null);
   const [areFiltersLoading, setAreFiltersLoading] = useState(true);
@@ -309,8 +307,8 @@ export function CatalogPage() {
 
   const loadFilterOptions = useCallback(async (signal?: AbortSignal) => {
     setAreFiltersLoading(true);
-    const [nextCategories, nextBrands] = await Promise.allSettled([
-      commerceClient.listCatalogCategoryOptions(signal),
+    const [nextHierarchy, nextBrands] = await Promise.allSettled([
+      commerceClient.getCatalogCategoryHierarchy(signal),
       commerceClient.listCatalogBrandOptions(signal),
     ]);
 
@@ -319,11 +317,11 @@ export function CatalogPage() {
     }
 
     const errors: string[] = [];
-    if (nextCategories.status === "fulfilled") {
-      setCategoryOptions(nextCategories.value.map(toCategoryFilterOption));
+    if (nextHierarchy.status === "fulfilled") {
+      setCategoryHierarchy(nextHierarchy.value);
     } else {
-      setCategoryOptions([]);
-      errors.push(`Could not load category hierarchy: ${getCommerceApiErrorMessage(nextCategories.reason)}`);
+      setCategoryHierarchy(null);
+      errors.push(getCategoryHierarchyErrorMessage(nextHierarchy.reason));
     }
 
     if (nextBrands.status === "fulfilled") {
@@ -344,98 +342,20 @@ export function CatalogPage() {
     setAreFiltersLoading(false);
   }, []);
 
-  const matchingCategoryOptions = useMemo(
-    () =>
-      categoryOptions.filter((option) => {
-        if (selectedFamily && option.family !== selectedFamily) {
-          return false;
-        }
-
-        if (selectedCategory && option.category !== selectedCategory) {
-          return false;
-        }
-
-        if (selectedSubCategory && option.subCategory !== selectedSubCategory) {
-          return false;
-        }
-
-        return true;
-      }),
-    [categoryOptions, selectedCategory, selectedFamily, selectedSubCategory],
-  );
-
-  const exactCategoryRaw = useMemo(() => {
-    if (!selectedFamily && !selectedCategory && !selectedSubCategory) {
-      return "";
-    }
-
-    const rawValues = Array.from(new Set(matchingCategoryOptions.map((option) => option.raw)));
-    return rawValues.length === 1 ? rawValues[0] : "";
-  }, [matchingCategoryOptions, selectedCategory, selectedFamily, selectedSubCategory]);
-
   const familyOptions = useMemo(
-    () =>
-      getUniqueValues(categoryOptions.map((option) => option.family)).map((family) => ({
-        value: family,
-        count: aggregateCount(categoryOptions.filter((option) => option.family === family)),
-      })),
-    [categoryOptions],
+    () => getFamilyOptions(categoryHierarchy),
+    [categoryHierarchy],
   );
 
   const categoryLevelOptions = useMemo(
-    () =>
-      getUniqueValues(
-        categoryOptions
-          .filter((option) => !selectedFamily || option.family === selectedFamily)
-          .map((option) => option.category),
-      ).map((categoryName) => ({
-        value: categoryName,
-        count: aggregateCount(
-          categoryOptions.filter(
-            (option) =>
-              (!selectedFamily || option.family === selectedFamily) &&
-              option.category === categoryName,
-          ),
-        ),
-      })),
-    [categoryOptions, selectedFamily],
+    () => getCategoryOptions(categoryHierarchy, selectedFamily),
+    [categoryHierarchy, selectedFamily],
   );
 
   const subCategoryOptions = useMemo(
-    () =>
-      getUniqueValues(
-        categoryOptions
-          .filter(
-            (option) =>
-              (!selectedFamily || option.family === selectedFamily) &&
-              (!selectedCategory || option.category === selectedCategory),
-          )
-          .map((option) => option.subCategory),
-      ).map((subCategory) => ({
-        value: subCategory,
-        count: aggregateCount(
-          categoryOptions.filter(
-            (option) =>
-              (!selectedFamily || option.family === selectedFamily) &&
-              (!selectedCategory || option.category === selectedCategory) &&
-              option.subCategory === subCategory,
-          ),
-        ),
-      })),
-    [categoryOptions, selectedCategory, selectedFamily],
+    () => getSubCategoryOptions(categoryHierarchy, selectedFamily, selectedCategory),
+    [categoryHierarchy, selectedCategory, selectedFamily],
   );
-
-  const categoryFilterNote = useMemo(() => {
-    if (!selectedFamily && !selectedCategory && !selectedSubCategory) {
-      return null;
-    }
-
-    if (exactCategoryRaw) {
-      return "Exact backend category filtering is active for one OpenCart category path.";
-    }
-
-    return "Select a sub-category for exact server filtering.";
-  }, [exactCategoryRaw, selectedCategory, selectedFamily, selectedSubCategory]);
 
   const productParams = useMemo<CatalogProductsParams>(
     () => {
@@ -452,9 +372,14 @@ export function CatalogPage() {
         params.q = trimmedQ;
       }
 
-      if (exactCategoryRaw) {
-        params.category = exactCategoryRaw;
-      }
+      Object.assign(
+        params,
+        makeHierarchyFilterParams({
+          family: selectedFamily,
+          categoryName: selectedCategory,
+          subCategory: selectedSubCategory,
+        }),
+      );
 
       if (trimmedManufacturer.length > 0) {
         params.manufacturer = trimmedManufacturer;
@@ -466,7 +391,18 @@ export function CatalogPage() {
 
       return params;
     },
-    [exactCategoryRaw, includeIgnored, manufacturer, marketplace, page, pageSize, q, showComposite],
+    [
+      includeIgnored,
+      manufacturer,
+      marketplace,
+      page,
+      pageSize,
+      q,
+      selectedCategory,
+      selectedFamily,
+      selectedSubCategory,
+      showComposite,
+    ],
   );
 
   const loadProducts = useCallback(
@@ -512,7 +448,6 @@ export function CatalogPage() {
     setPreviewResult(null);
     setRunResult(null);
   }, [
-    exactCategoryRaw,
     includeIgnored,
     manufacturer,
     marketplace,
@@ -574,7 +509,15 @@ export function CatalogPage() {
     makeSelectionBody(
       source,
       selectedModels,
-      { q, categoryRaw: exactCategoryRaw, manufacturer, marketplace, includeIgnored },
+      {
+        q,
+        family: selectedFamily,
+        categoryName: selectedCategory,
+        subCategory: selectedSubCategory,
+        manufacturer,
+        marketplace,
+        includeIgnored,
+      },
       dryRun,
     );
 
@@ -705,8 +648,7 @@ export function CatalogPage() {
               <option value="">All families</option>
               {familyOptions.map((item) => (
                 <option key={item.value} value={item.value}>
-                  {item.value}
-                  {formatOptionCount(item.count)}
+                  {formatHierarchyOptionLabel(item)}
                 </option>
               ))}
             </select>
@@ -720,13 +662,12 @@ export function CatalogPage() {
                 setSelectedCategory(event.target.value);
                 setSelectedSubCategory("");
               }}
-              disabled={!selectedFamily && categoryLevelOptions.length === 0}
+              disabled={!selectedFamily}
             >
               <option value="">All categories</option>
               {categoryLevelOptions.map((item) => (
                 <option key={item.value} value={item.value}>
-                  {item.value}
-                  {formatOptionCount(item.count)}
+                  {formatHierarchyOptionLabel(item)}
                 </option>
               ))}
             </select>
@@ -737,13 +678,12 @@ export function CatalogPage() {
             <select
               value={selectedSubCategory}
               onChange={(event) => setSelectedSubCategory(event.target.value)}
-              disabled={!selectedCategory && subCategoryOptions.length === 0}
+              disabled={!selectedFamily || !selectedCategory}
             >
               <option value="">All sub-categories</option>
               {subCategoryOptions.map((item) => (
                 <option key={item.value} value={item.value}>
-                  {item.value}
-                  {formatOptionCount(item.count)}
+                  {formatHierarchyOptionLabel(item)}
                 </option>
               ))}
             </select>
@@ -819,9 +759,8 @@ export function CatalogPage() {
         </div>
 
         <p className="muted">
-          Family/Category split is parsed from OpenCart category paths. Exact backend filtering is
-          applied when the selection resolves to a single category path.
-          {categoryFilterNote ? ` ${categoryFilterNote}` : ""}
+          Family, Category, and Sub-Category use backend-native hierarchy filters. Raw OpenCart
+          category data is available in each product row for debugging.
         </p>
 
         <div className="toolbar">
@@ -912,7 +851,7 @@ export function CatalogPage() {
                     const selectionBlocker = getSelectionBlocker(product);
                     const isSelected = selectedModels.has(model);
                     const warnings = Array.isArray(product.warnings) ? product.warnings : [];
-                    const parsedCategory = parseOpenCartCategory(product.category);
+                    const rawCategory = product.raw_category ?? product.category ?? "";
 
                     return (
                       <tr key={model}>
@@ -927,9 +866,9 @@ export function CatalogPage() {
                         </td>
                         <td className="nowrap-cell">{model}</td>
                         <td>{formatValue(product.name)}</td>
-                        <td>{formatValue(parsedCategory.family)}</td>
-                        <td>{formatValue(parsedCategory.category)}</td>
-                        <td>{formatValue(parsedCategory.subCategory)}</td>
+                        <td>{formatValue(product.family)}</td>
+                        <td>{formatValue(product.category_name)}</td>
+                        <td>{formatValue(product.sub_category)}</td>
                         <td>{formatValue(product.manufacturer)}</td>
                         <td>{formatValue(product.mpn)}</td>
                         <td className="nowrap-cell">{formatMoney(product.price)}</td>
@@ -955,6 +894,10 @@ export function CatalogPage() {
                             {warnings.length > 0 ? (
                               <span className="muted">{warnings.join(", ")}</span>
                             ) : null}
+                            <details className="raw-category-detail">
+                              <summary>Raw</summary>
+                              <span>{formatValue(rawCategory)}</span>
+                            </details>
                           </div>
                         </td>
                       </tr>
