@@ -1,14 +1,24 @@
 import type {
+  ApplyPriceMonitoringReviewActionsBody,
+  ApplyPriceMonitoringReviewActionsResult,
   BridgeRunBody,
   BridgeRunResponse,
   CatalogProduct,
   CatalogProductsParams,
   CatalogProductsResponse,
   CatalogSummary,
+  ExportPriceMonitoringPriceUpdateBody,
+  ExportPriceMonitoringPriceUpdateResult,
+  FetchPriceMonitoringBody,
+  FetchPriceMonitoringResult,
   FileListParams,
   FileListResponse,
   FileListItem,
   FileRoot,
+  PriceMonitoringReviewItem,
+  PriceMonitoringReviewParams,
+  PriceMonitoringReviewResponse,
+  PriceMonitoringRun,
   PriceMonitoringSelectionBody,
   PriceMonitoringSelectionResult,
   ReadCsvFileBody,
@@ -290,6 +300,70 @@ function normalizeCsvRead(payload: unknown): ReadCsvFileResponse {
   };
 }
 
+function normalizeStringArray(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value
+        .filter((item): item is string | number => typeof item === "string" || typeof item === "number")
+        .map((item) => String(item))
+    : [];
+}
+
+function normalizeRun(value: unknown): PriceMonitoringRun | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return value as PriceMonitoringRun;
+}
+
+function normalizeRunList(payload: unknown): PriceMonitoringRun[] {
+  return getArrayPayload(payload, ["runs", "items", "data", "results"])
+    .map(normalizeRun)
+    .filter((run): run is PriceMonitoringRun => run !== null);
+}
+
+function normalizeReviewItem(value: unknown): PriceMonitoringReviewItem | null {
+  if (!isRecord(value) || typeof value.model !== "string") {
+    return null;
+  }
+
+  return {
+    ...value,
+    model: value.model,
+    warnings: normalizeStringArray(value.warnings),
+  } as PriceMonitoringReviewItem;
+}
+
+function normalizeReview(payload: unknown): PriceMonitoringReviewResponse {
+  if (!isRecord(payload)) {
+    return {
+      items: [],
+    };
+  }
+
+  return {
+    ...payload,
+    run_id: typeof payload.run_id === "string" || typeof payload.run_id === "number" ? payload.run_id : null,
+    items: getArrayPayload(payload.items, [])
+      .map(normalizeReviewItem)
+      .filter((item): item is PriceMonitoringReviewItem => item !== null),
+    summary: isRecord(payload.summary) ? (payload.summary as Record<string, number>) : {},
+    review_csv_path: typeof payload.review_csv_path === "string" ? payload.review_csv_path : null,
+    enriched_csv_path: typeof payload.enriched_csv_path === "string" ? payload.enriched_csv_path : null,
+  };
+}
+
+function normalizeFetchResult(payload: unknown): FetchPriceMonitoringResult {
+  if (!isRecord(payload)) {
+    return {};
+  }
+
+  return {
+    ...payload,
+    warnings: normalizeStringArray(payload.warnings),
+  };
+}
+
 async function request<T>(path: string, options: CommerceRequestOptions = {}): Promise<T> {
   const response = await fetch(`${commerceApiBaseUrl}${path}`, {
     ...options,
@@ -353,6 +427,90 @@ export const commerceClient = {
       body,
       signal,
     });
+  },
+
+  async listPriceMonitoringRuns(signal?: AbortSignal): Promise<PriceMonitoringRun[]> {
+    return normalizeRunList(await request<unknown>("/price-monitoring/runs", { signal }));
+  },
+
+  async getPriceMonitoringRun(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<PriceMonitoringRun> {
+    const run = normalizeRun(
+      await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}`, { signal }),
+    );
+    return run ?? {};
+  },
+
+  async fetchPriceMonitoringRun(
+    runId: string,
+    body: FetchPriceMonitoringBody,
+    signal?: AbortSignal,
+  ): Promise<FetchPriceMonitoringResult> {
+    return normalizeFetchResult(
+      await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}/fetch`, {
+        method: "POST",
+        body,
+        signal,
+      }),
+    );
+  },
+
+  async getPriceMonitoringFetchResult(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<FetchPriceMonitoringResult> {
+    return normalizeFetchResult(
+      await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}/fetch`, {
+        signal,
+      }),
+    );
+  },
+
+  async getPriceMonitoringReview(
+    runId: string,
+    params: PriceMonitoringReviewParams = {},
+    signal?: AbortSignal,
+  ): Promise<PriceMonitoringReviewResponse> {
+    return normalizeReview(
+      await request<unknown>(
+        appendQuery(`/price-monitoring/runs/${encodeURIComponent(runId)}/review`, {
+          enriched_csv_path: params.enriched_csv_path,
+        }),
+        { signal },
+      ),
+    );
+  },
+
+  applyPriceMonitoringReviewActions(
+    runId: string,
+    body: ApplyPriceMonitoringReviewActionsBody,
+    signal?: AbortSignal,
+  ): Promise<ApplyPriceMonitoringReviewActionsResult> {
+    return request<ApplyPriceMonitoringReviewActionsResult>(
+      `/price-monitoring/runs/${encodeURIComponent(runId)}/review/actions`,
+      {
+        method: "POST",
+        body,
+        signal,
+      },
+    );
+  },
+
+  exportPriceMonitoringPriceUpdate(
+    runId: string,
+    body: ExportPriceMonitoringPriceUpdateBody,
+    signal?: AbortSignal,
+  ): Promise<ExportPriceMonitoringPriceUpdateResult> {
+    return request<ExportPriceMonitoringPriceUpdateResult>(
+      `/price-monitoring/runs/${encodeURIComponent(runId)}/export-price-update`,
+      {
+        method: "POST",
+        body,
+        signal,
+      },
+    );
   },
 
   async getFileRoots(signal?: AbortSignal): Promise<FileRoot[]> {

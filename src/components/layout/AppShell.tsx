@@ -6,6 +6,7 @@ const platformNavItems = [
   { to: "/", label: "Dashboard" },
   { to: "/catalog", label: "Catalog" },
   { to: "/csv-bridge", label: "CSV/Bridge" },
+  { to: "/price-monitoring", label: "Price Monitoring" },
   { to: "/product-agent", label: "Product-Agent" },
 ];
 

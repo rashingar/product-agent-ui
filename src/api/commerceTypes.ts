@@ -106,6 +106,114 @@ export interface PriceMonitoringSelectionResult {
   [key: string]: unknown;
 }
 
+export type PriceMonitoringAction = "match_price" | "undercut" | "ignore";
+
+export interface PriceMonitoringRun {
+  run_id?: string | number | null;
+  id?: string | number | null;
+  status?: string | null;
+  source?: PriceMonitoringSource | string | null;
+  output_dir?: string | null;
+  input_csv_path?: string | null;
+  selection_summary_path?: string | null;
+  selected_count?: number;
+  skipped_count?: number;
+  skipped_by_reason?: Record<string, number>;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface FetchPriceMonitoringBody {
+  source: PriceMonitoringSource | null;
+  catalog_url: string | null;
+}
+
+export interface FetchPriceMonitoringResult {
+  status?: string | null;
+  source?: PriceMonitoringSource | string | null;
+  input_csv_path?: string | null;
+  enriched_csv_path?: string | null;
+  fetch_summary_path?: string | null;
+  fetch_result_path?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  warnings?: string[];
+  [key: string]: unknown;
+}
+
+export interface PriceMonitoringReviewParams {
+  enriched_csv_path?: string | null;
+}
+
+export interface PriceMonitoringReviewItem {
+  model: string;
+  mpn?: string | null;
+  name?: string | null;
+  current_price?: number | null;
+  source?: PriceMonitoringSource | string | null;
+  competitor_price?: number | null;
+  competitor_store?: string | null;
+  competitor_url?: string | null;
+  price_delta?: number | null;
+  price_delta_percent?: number | null;
+  recommended_action?: PriceMonitoringAction | "" | string | null;
+  selected_action?: PriceMonitoringAction | "" | string | null;
+  undercut_amount?: number | null;
+  target_price?: number | null;
+  status?: string | null;
+  warnings?: string[];
+  [key: string]: unknown;
+}
+
+export interface PriceMonitoringReviewResponse {
+  run_id?: string | number | null;
+  items: PriceMonitoringReviewItem[];
+  summary?: Record<string, number>;
+  review_csv_path?: string | null;
+  enriched_csv_path?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PriceMonitoringReviewAction {
+  model: string;
+  selected_action: PriceMonitoringAction;
+  undercut_amount?: number | null;
+  reason?: string;
+}
+
+export interface ApplyPriceMonitoringReviewActionsBody {
+  enriched_csv_path: string | null;
+  actions: PriceMonitoringReviewAction[];
+}
+
+export interface ApplyPriceMonitoringReviewActionsResult {
+  status?: string | null;
+  review_csv_path?: string | null;
+  review_actions_path?: string | null;
+  summary?: {
+    actions_count?: number;
+    exportable_count?: number;
+    ignored_count?: number;
+    not_exportable_count?: number;
+    [key: string]: number | undefined;
+  };
+  [key: string]: unknown;
+}
+
+export interface ExportPriceMonitoringPriceUpdateBody {
+  review_csv_path: string | null;
+  output_path: string | null;
+}
+
+export interface ExportPriceMonitoringPriceUpdateResult {
+  status?: string | null;
+  output_path?: string | null;
+  rows_exported?: number;
+  columns?: string[];
+  [key: string]: unknown;
+}
+
 export interface FileRoot {
   path: string;
   exists: boolean;

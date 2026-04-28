@@ -26,6 +26,13 @@ The Catalog tab uses the commerce / price-fetcher API:
 - `GET /api/catalog/summary`
 - `POST /api/price-monitoring/selection/preview`
 - `POST /api/price-monitoring/runs`
+- `GET /api/price-monitoring/runs`
+- `GET /api/price-monitoring/runs/{run_id}`
+- `POST /api/price-monitoring/runs/{run_id}/fetch`
+- `GET /api/price-monitoring/runs/{run_id}/fetch`
+- `GET /api/price-monitoring/runs/{run_id}/review`
+- `POST /api/price-monitoring/runs/{run_id}/review/actions`
+- `POST /api/price-monitoring/runs/{run_id}/export-price-update`
 
 The CSV/Bridge tab also uses the commerce / price-fetcher API:
 
@@ -102,6 +109,11 @@ npm run preview
   being overwritten before the UI enables the action.
 - Bridge runs are executed by the commerce backend. When the stock CSV path is omitted, the
   backend default stock file is used.
-- The full Price Monitoring fetch/review/export UI is not part of this branch.
+- The Price Monitoring tab supports this workflow: preview/create a selection run, fetch
+  competitor prices, load review rows, choose `match_price`, `undercut`, or `ignore` actions,
+  apply those review actions, and export an OpenCart price update CSV.
+- BestPrice fetches can include an optional `catalog_url` hint, while the backend may also
+  resolve products from MPN data.
+- Price Monitoring export is CSV only. The UI does not update OpenCart automatically.
 - No authentication, websocket transport, batch upload, artifact previewing, Redux, Zustand, or React Query is included.
 - Job detail and jobs list polling runs every 2.5 seconds while queued/running-like statuses are present, then stops once the backend reports a terminal status.
