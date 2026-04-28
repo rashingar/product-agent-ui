@@ -105,3 +105,105 @@ export interface PriceMonitoringSelectionResult {
   skipped_items?: PriceMonitoringSelectionItem[];
   [key: string]: unknown;
 }
+
+export interface FileRoot {
+  path: string;
+  exists: boolean;
+}
+
+export interface FileRootsResponse {
+  roots: FileRoot[];
+}
+
+export type FileListItemType = "file" | "directory";
+
+export interface FileListItem {
+  name: string;
+  path: string;
+  type: FileListItemType;
+  extension?: string | null;
+  size_bytes?: number | null;
+  modified_at?: string | null;
+}
+
+export interface FileListParams {
+  root: string;
+  relative_path?: string | null;
+}
+
+export interface FileListResponse {
+  root: string;
+  relative_path: string;
+  items: FileListItem[];
+}
+
+export interface ReadCsvFileBody {
+  path: string;
+  delimiter: string | null;
+  max_rows: number;
+}
+
+export type CsvRow = Record<string, string>;
+
+export interface ReadCsvFileResponse {
+  path: string;
+  filename: string;
+  delimiter: string;
+  encoding?: string | null;
+  columns: string[];
+  rows: CsvRow[];
+  returned_rows: number;
+  total_rows: number;
+  size_bytes?: number | null;
+  modified_at?: string | null;
+}
+
+export interface SaveCsvFileBody {
+  path: string;
+  columns: string[];
+  rows: CsvRow[];
+  delimiter: string;
+}
+
+export interface SaveCsvCopyBody {
+  source_path: string;
+  target_path: string;
+  columns: string[];
+  rows: CsvRow[];
+  delimiter: string;
+}
+
+export interface SaveCsvResponse {
+  path?: string;
+  target_path?: string;
+  source_path?: string;
+  rows?: number;
+  row_count?: number;
+  columns?: string[];
+  size_bytes?: number | null;
+  modified_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BridgeRunBody {
+  opencart_export_path: string;
+  stock_csv_path: string | null;
+  output_dir: string | null;
+}
+
+export interface BridgeArtifact {
+  name?: string | null;
+  path?: string | null;
+  [key: string]: unknown;
+}
+
+export interface BridgeRunResponse {
+  run_id?: string | number | null;
+  status?: string | null;
+  stock_csv_path?: string | null;
+  opencart_export_path?: string | null;
+  output_dir?: string | null;
+  artifacts?: BridgeArtifact[];
+  summary?: Record<string, number>;
+  [key: string]: unknown;
+}

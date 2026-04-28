@@ -27,6 +27,15 @@ The Catalog tab uses the commerce / price-fetcher API:
 - `POST /api/price-monitoring/selection/preview`
 - `POST /api/price-monitoring/runs`
 
+The CSV/Bridge tab also uses the commerce / price-fetcher API:
+
+- `GET /api/files/roots`
+- `GET /api/files/list`
+- `POST /api/files/read`
+- `POST /api/files/save`
+- `POST /api/files/save-copy`
+- `POST /api/bridge/run`
+
 ## Windows 10 Setup
 
 This repo works without WSL. From Command Prompt or PowerShell in this folder, run:
@@ -86,6 +95,13 @@ npm run preview
 - This is a UI-only repo. Backend job logic stays in the backend.
 - The Catalog tab can browse commerce catalog products and preview/create Price Monitoring
   selection runs.
-- CSV/Bridge and the full Price Monitoring fetch/review/export UI are not part of this branch.
+- The CSV/Bridge tab gets safe file roots from the commerce backend, opens CSV files through
+  backend file APIs, and keeps edited CSV values as strings so values such as `005606` are
+  preserved.
+- Save-copy is the safe default for CSV edits. Save-in-place requires typing the exact path
+  being overwritten before the UI enables the action.
+- Bridge runs are executed by the commerce backend. When the stock CSV path is omitted, the
+  backend default stock file is used.
+- The full Price Monitoring fetch/review/export UI is not part of this branch.
 - No authentication, websocket transport, batch upload, artifact previewing, Redux, Zustand, or React Query is included.
 - Job detail and jobs list polling runs every 2.5 seconds while queued/running-like statuses are present, then stops once the backend reports a terminal status.

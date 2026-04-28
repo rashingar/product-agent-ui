@@ -1,10 +1,21 @@
 import type {
+  BridgeRunBody,
+  BridgeRunResponse,
   CatalogProduct,
   CatalogProductsParams,
   CatalogProductsResponse,
   CatalogSummary,
+  FileListParams,
+  FileListResponse,
+  FileListItem,
+  FileRoot,
   PriceMonitoringSelectionBody,
   PriceMonitoringSelectionResult,
+  ReadCsvFileBody,
+  ReadCsvFileResponse,
+  SaveCsvCopyBody,
+  SaveCsvFileBody,
+  SaveCsvResponse,
 } from "./commerceTypes";
 
 const DEFAULT_COMMERCE_API_BASE_URL = "/commerce-api";
@@ -91,7 +102,9 @@ function buildHeaders(options: CommerceRequestOptions): HeadersInit {
   return headers;
 }
 
-function appendQuery(path: string, params?: CatalogProductsParams): string {
+type QueryParams = Record<string, string | number | boolean | null | undefined>;
+
+function appendQuery(path: string, params?: QueryParams): string {
   if (!params) {
     return path;
   }
@@ -123,6 +136,25 @@ function normalizeStringList(payload: unknown): string[] {
   return list
     .filter((value): value is string | number => typeof value === "string" || typeof value === "number")
     .map((value) => String(value));
+}
+
+function getArrayPayload(payload: unknown, keys: string[]): unknown[] {
+  if (Array.isArray(payload)) {
+    return payload;
+  }
+
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  for (const key of keys) {
+    const value = payload[key];
+    if (Array.isArray(value)) {
+      return value;
+    }
+  }
+
+  return [];
 }
 
 function toNumber(value: unknown, fallback: number): number {
@@ -161,6 +193,103 @@ function normalizeProductsResponse(payload: unknown): CatalogProductsResponse {
   };
 }
 
+function normalizeFileRoot(value: unknown): FileRoot | null {
+  if (!isRecord(value) || typeof value.path !== "string") {
+    return null;
+  }
+
+  return {
+    path: value.path,
+    exists: value.exists === true,
+  };
+}
+
+function normalizeFileRoots(payload: unknown): FileRoot[] {
+  return getArrayPayload(payload, ["roots", "items", "data", "results"])
+    .map(normalizeFileRoot)
+    .filter((root): root is FileRoot => root !== null);
+}
+
+function normalizeFileList(payload: unknown): FileListResponse {
+  if (!isRecord(payload)) {
+    return {
+      root: "",
+      relative_path: "",
+      items: [],
+    };
+  }
+
+  const items = getArrayPayload(payload.items, [])
+    .filter(isRecord)
+    .map<FileListItem>((item) => ({
+      name: typeof item.name === "string" ? item.name : "",
+      path: typeof item.path === "string" ? item.path : "",
+      type: item.type === "directory" ? "directory" : "file",
+      extension: typeof item.extension === "string" ? item.extension : "",
+      size_bytes: typeof item.size_bytes === "number" ? item.size_bytes : null,
+      modified_at: typeof item.modified_at === "string" ? item.modified_at : null,
+    }))
+    .filter((item) => item.name.length > 0 && item.path.length > 0);
+
+  return {
+    root: typeof payload.root === "string" ? payload.root : "",
+    relative_path: typeof payload.relative_path === "string" ? payload.relative_path : "",
+    items,
+  };
+}
+
+function normalizeCsvValue(value: unknown): string {
+  if (value === null || value === undefined) {
+    return "";
+  }
+
+  return String(value);
+}
+
+function normalizeCsvRead(payload: unknown): ReadCsvFileResponse {
+  if (!isRecord(payload)) {
+    return {
+      path: "",
+      filename: "",
+      delimiter: ",",
+      encoding: null,
+      columns: [],
+      rows: [],
+      returned_rows: 0,
+      total_rows: 0,
+      size_bytes: null,
+      modified_at: null,
+    };
+  }
+
+  const columns = Array.isArray(payload.columns)
+    ? payload.columns
+        .filter((column): column is string | number => typeof column === "string" || typeof column === "number")
+        .map((column) => String(column))
+    : [];
+  const rows = Array.isArray(payload.rows)
+    ? payload.rows.filter(isRecord).map((row) =>
+        columns.reduce<Record<string, string>>((nextRow, column) => {
+          nextRow[column] = normalizeCsvValue(row[column]);
+          return nextRow;
+        }, {}),
+      )
+    : [];
+
+  return {
+    path: typeof payload.path === "string" ? payload.path : "",
+    filename: typeof payload.filename === "string" ? payload.filename : "",
+    delimiter: typeof payload.delimiter === "string" ? payload.delimiter : ",",
+    encoding: typeof payload.encoding === "string" ? payload.encoding : null,
+    columns,
+    rows,
+    returned_rows: toNumber(payload.returned_rows, rows.length),
+    total_rows: toNumber(payload.total_rows, rows.length),
+    size_bytes: typeof payload.size_bytes === "number" ? payload.size_bytes : null,
+    modified_at: typeof payload.modified_at === "string" ? payload.modified_at : null,
+  };
+}
+
 async function request<T>(path: string, options: CommerceRequestOptions = {}): Promise<T> {
   const response = await fetch(`${commerceApiBaseUrl}${path}`, {
     ...options,
@@ -187,7 +316,7 @@ export const commerceClient = {
     signal?: AbortSignal,
   ): Promise<CatalogProductsResponse> {
     return normalizeProductsResponse(
-      await request<unknown>(appendQuery("/catalog/products", params), { signal }),
+      await request<unknown>(appendQuery("/catalog/products", params as QueryParams), { signal }),
     );
   },
 
@@ -220,6 +349,59 @@ export const commerceClient = {
     signal?: AbortSignal,
   ): Promise<PriceMonitoringSelectionResult> {
     return request<PriceMonitoringSelectionResult>("/price-monitoring/runs", {
+      method: "POST",
+      body,
+      signal,
+    });
+  },
+
+  async getFileRoots(signal?: AbortSignal): Promise<FileRoot[]> {
+    return normalizeFileRoots(await request<unknown>("/files/roots", { signal }));
+  },
+
+  async listFiles(params: FileListParams, signal?: AbortSignal): Promise<FileListResponse> {
+    return normalizeFileList(
+      await request<unknown>(
+        appendQuery("/files/list", {
+          root: params.root,
+          relative_path: params.relative_path,
+        }),
+        { signal },
+      ),
+    );
+  },
+
+  async readCsvFile(
+    body: ReadCsvFileBody,
+    signal?: AbortSignal,
+  ): Promise<ReadCsvFileResponse> {
+    return normalizeCsvRead(
+      await request<unknown>("/files/read", {
+        method: "POST",
+        body,
+        signal,
+      }),
+    );
+  },
+
+  saveCsvFile(body: SaveCsvFileBody, signal?: AbortSignal): Promise<SaveCsvResponse> {
+    return request<SaveCsvResponse>("/files/save", {
+      method: "POST",
+      body,
+      signal,
+    });
+  },
+
+  saveCsvCopy(body: SaveCsvCopyBody, signal?: AbortSignal): Promise<SaveCsvResponse> {
+    return request<SaveCsvResponse>("/files/save-copy", {
+      method: "POST",
+      body,
+      signal,
+    });
+  },
+
+  runBridge(body: BridgeRunBody, signal?: AbortSignal): Promise<BridgeRunResponse> {
+    return request<BridgeRunResponse>("/bridge/run", {
       method: "POST",
       body,
       signal,

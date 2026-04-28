@@ -357,6 +357,134 @@ textarea {
   justify-content: flex-end;
 }
 
+.browser-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 340px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.browser-panel,
+.editor-panel,
+.save-box {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+  background: #fbfcfc;
+}
+
+.browser-panel label,
+.save-box label {
+  display: grid;
+  gap: 8px;
+  font-weight: 700;
+}
+
+.browser-panel input,
+.browser-panel select,
+.save-box input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: #ffffff;
+  color: var(--text);
+}
+
+.browser-panel input:focus,
+.browser-panel select:focus,
+.save-box input:focus {
+  border-color: var(--accent);
+  outline: 3px solid #cfece8;
+}
+
+.path-bar {
+  display: grid;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+  overflow-wrap: anywhere;
+}
+
+.file-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.file-list-button {
+  display: grid;
+  width: 100%;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.file-list-button:hover {
+  border-color: var(--accent);
+}
+
+.file-list-button span,
+.file-list-button small {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.csv-table-wrap {
+  max-height: 560px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.csv-table-wrap table {
+  min-width: 960px;
+}
+
+.csv-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
+.table-input {
+  min-width: 160px;
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 9px;
+  background: #ffffff;
+  color: var(--text);
+}
+
+.table-input:focus {
+  border-color: var(--accent);
+  outline: 3px solid #cfece8;
+}
+
+.save-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.save-box h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
 .form-error,
 .error-state {
   border: 1px solid #f2b8b5;
@@ -472,6 +600,10 @@ th {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.csv-metadata-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .result-block {
   display: grid;
   gap: 14px;
@@ -573,7 +705,10 @@ th {
   .quick-links,
   .summary-grid,
   .catalog-summary-grid,
-  .filter-grid {
+  .csv-metadata-grid,
+  .filter-grid,
+  .browser-layout,
+  .save-grid {
     grid-template-columns: 1fr;
   }
 
