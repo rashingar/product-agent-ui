@@ -1,5 +1,6 @@
 import { createBrowserRouter } from "react-router-dom";
 import { AppShell } from "../components/layout/AppShell";
+import { CatalogPage } from "../pages/CatalogPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { JobsPage } from "../pages/JobsPage";
@@ -15,6 +16,8 @@ export const router = createBrowserRouter([
     element: <AppShell />,
     children: [
       { index: true, element: <DashboardPage /> },
+      { path: "catalog", element: <CatalogPage /> },
+      { path: "product-agent", element: <JobsPage /> },
       { path: "pipeline", element: <PipelineJobPage /> },
       { path: "prepare", element: <PrepareJobPage /> },
       { path: "render", element: <RenderJobPage /> },

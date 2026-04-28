@@ -1,10 +1,11 @@
 # Product Agent UI
 
-Thin React + Vite + TypeScript operator dashboard for a local job-based backend API.
+Thin React + Vite + TypeScript operator dashboard for local Product-Agent and commerce
+backend APIs.
 
 ## Backend Contract
 
-The UI expects these local endpoints:
+The Product-Agent UI expects these local endpoints from the Product-Agent API:
 
 - `GET /api/health`
 - `POST /api/jobs/prepare`
@@ -16,6 +17,15 @@ The UI expects these local endpoints:
 - `GET /api/jobs/{job_id}/artifacts`
 
 Job creation responses should include either `job_id` or `id`. The UI also accepts common wrapped shapes such as `{ "job": { ... } }`, `{ "data": { ... } }`, and `{ "result": { ... } }`.
+
+The Catalog tab uses the commerce / price-fetcher API:
+
+- `GET /api/catalog/products`
+- `GET /api/catalog/categories`
+- `GET /api/catalog/brands`
+- `GET /api/catalog/summary`
+- `POST /api/price-monitoring/selection/preview`
+- `POST /api/price-monitoring/runs`
 
 ## Windows 10 Setup
 
@@ -46,15 +56,22 @@ Copy-Item .env.example .env
 npm run dev
 ```
 
-Local dev uses Vite's `/api` proxy by default:
+Local dev uses Vite proxies by default:
 
 ```bash
 VITE_API_BASE_URL=
 VITE_API_PROXY_TARGET=http://127.0.0.1:8000
+VITE_COMMERCE_API_BASE_URL=
+VITE_COMMERCE_API_PROXY_TARGET=http://127.0.0.1:8001
 ```
 
-Change `VITE_API_PROXY_TARGET` if the backend runs on a different host or port.
-Set `VITE_API_BASE_URL` only when the browser should call the backend directly.
+- Product-Agent API default: `http://127.0.0.1:8000`
+- Commerce API default: `http://127.0.0.1:8001`
+- `/api` proxies to the Product-Agent API.
+- `/commerce-api` proxies to the commerce API and rewrites requests to `/api`.
+
+Set `VITE_API_BASE_URL` or `VITE_COMMERCE_API_BASE_URL` only when the browser should call
+that backend directly instead of using the Vite proxy.
 
 ## Scripts
 
@@ -67,5 +84,8 @@ npm run preview
 ## Notes
 
 - This is a UI-only repo. Backend job logic stays in the backend.
+- The Catalog tab can browse commerce catalog products and preview/create Price Monitoring
+  selection runs.
+- CSV/Bridge and the full Price Monitoring fetch/review/export UI are not part of this branch.
 - No authentication, websocket transport, batch upload, artifact previewing, Redux, Zustand, or React Query is included.
 - Job detail and jobs list polling runs every 2.5 seconds while queued/running-like statuses are present, then stops once the backend reports a terminal status.
