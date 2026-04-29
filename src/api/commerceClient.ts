@@ -16,6 +16,8 @@ import type {
   CatalogProduct,
   CatalogProductsParams,
   CatalogProductsResponse,
+  CatalogSnapshot,
+  CatalogSnapshotResponse,
   CatalogSubCategoryNode,
   CatalogSummary,
   ExportPriceMonitoringPriceUpdateBody,
@@ -28,12 +30,18 @@ import type {
   FileRoot,
   PathRootsEnv,
   PathRootsResponse,
+  PriceHistoryResponse,
+  PriceMonitoringDbStatus,
+  PriceObservation,
+  PriceObservationsParams,
+  PriceObservationsResponse,
   PriceMonitoringReviewItem,
   PriceMonitoringReviewParams,
   PriceMonitoringReviewResponse,
   PriceMonitoringRun,
   PriceMonitoringSelectionBody,
   PriceMonitoringSelectionResult,
+  RunPriceObservationsResponse,
   ReadCsvFileBody,
   ReadCsvFileResponse,
   SaveCsvCopyBody,
@@ -590,6 +598,118 @@ function normalizeFetchResult(payload: unknown): FetchPriceMonitoringResult {
     fetch_summary_path: normalizeArtifactPathValue(payload.fetch_summary_path),
     fetch_result_path: normalizeArtifactPathValue(payload.fetch_result_path),
     warnings: normalizeStringArray(payload.warnings),
+    persistence_warnings: normalizeStringArray(payload.persistence_warnings),
+  };
+}
+
+function normalizeDbStatus(payload: unknown): PriceMonitoringDbStatus {
+  if (!isRecord(payload)) {
+    return {
+      configured: false,
+      reachable: false,
+      dialect: null,
+      error: null,
+    };
+  }
+
+  return {
+    configured: payload.configured === true,
+    reachable: payload.reachable === true,
+    dialect:
+      typeof payload.dialect === "string" || payload.dialect === null
+        ? payload.dialect
+        : null,
+    error:
+      typeof payload.error === "string" || payload.error === null
+        ? payload.error
+        : null,
+  };
+}
+
+function normalizePriceObservation(value: unknown): PriceObservation | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    raw_observation: isRecord(value.raw_observation) ? value.raw_observation : null,
+  } as PriceObservation;
+}
+
+function normalizePriceObservationsResponse(payload: unknown): PriceObservationsResponse {
+  const source = isRecord(payload) ? payload : {};
+  const items = getArrayPayload(payload, ["items", "observations", "data", "results"])
+    .map(normalizePriceObservation)
+    .filter((item): item is PriceObservation => item !== null);
+
+  return {
+    items,
+    limit: toNumber(source.limit, items.length),
+    offset: toNumber(source.offset, 0),
+    count: toNumber(source.count, items.length),
+  };
+}
+
+function normalizeRunPriceObservationsResponse(payload: unknown): RunPriceObservationsResponse {
+  const source = isRecord(payload) ? payload : {};
+  const response = normalizePriceObservationsResponse(payload);
+
+  return {
+    run_id:
+      typeof source.run_id === "string" || typeof source.run_id === "number"
+        ? source.run_id
+        : null,
+    items: response.items,
+    count: response.count,
+    matched_count: toNumber(source.matched_count, response.items.filter((item) => item.is_matched === true).length),
+    unmatched_count: toNumber(
+      source.unmatched_count,
+      response.items.filter((item) => item.is_matched !== true && item.match_status !== "matched").length,
+    ),
+  };
+}
+
+function normalizeCatalogSnapshot(value: unknown): CatalogSnapshot | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    raw_catalog_row: isRecord(value.raw_catalog_row) ? value.raw_catalog_row : null,
+  } as CatalogSnapshot;
+}
+
+function normalizeCatalogSnapshotResponse(payload: unknown): CatalogSnapshotResponse {
+  const source = isRecord(payload) ? payload : {};
+  const items = getArrayPayload(payload, ["items", "catalog_snapshot", "data", "results"])
+    .map(normalizeCatalogSnapshot)
+    .filter((item): item is CatalogSnapshot => item !== null);
+
+  return {
+    run_id:
+      typeof source.run_id === "string" || typeof source.run_id === "number"
+        ? source.run_id
+        : null,
+    items,
+    count: toNumber(source.count, items.length),
+  };
+}
+
+function normalizePriceHistoryResponse(payload: unknown): PriceHistoryResponse {
+  const source = isRecord(payload) ? payload : {};
+  const response = normalizePriceObservationsResponse(payload);
+
+  return {
+    product_id:
+      typeof source.product_id === "string" || typeof source.product_id === "number"
+        ? source.product_id
+        : null,
+    model: typeof source.model === "string" ? source.model : null,
+    catalog_source: typeof source.catalog_source === "string" ? source.catalog_source : null,
+    items: response.items,
+    count: response.count,
   };
 }
 
@@ -660,7 +780,11 @@ async function request<T>(path: string, options: CommerceRequestOptions = {}): P
       response.status === 404 && path.startsWith("/catalog/")
         ? " If the API is running, check that sourceCata.csv exists at C:\\Users\\user\\Downloads\\sourceCata.csv or set PRICEFETCHER_SOURCE_CATA_PATH."
         : "";
-    const message = `Commerce API ${response.status} at ${path}: ${backendMessage}${pathHint}${setupHint}`;
+    const dbHint =
+      response.status === 503 && path.startsWith("/price-monitoring/")
+        ? " Price monitoring DB persistence may be disabled or unreachable."
+        : "";
+    const message = `Commerce API ${response.status} at ${path}: ${backendMessage}${pathHint}${setupHint}${dbHint}`;
     throw new CommerceApiError(message, response.status, payload, path);
   }
 
@@ -937,6 +1061,80 @@ export const commerceClient = {
       await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}/fetch`, {
         signal,
       }),
+    );
+  },
+
+  async getPriceMonitoringDbStatus(signal?: AbortSignal): Promise<PriceMonitoringDbStatus> {
+    return normalizeDbStatus(
+      await request<unknown>("/price-monitoring/db/status", { signal }),
+    );
+  },
+
+  async listPriceMonitoringObservations(
+    params: PriceObservationsParams = {},
+    signal?: AbortSignal,
+  ): Promise<PriceObservationsResponse> {
+    return normalizePriceObservationsResponse(
+      await request<unknown>(
+        appendQuery("/price-monitoring/observations", params as QueryParams),
+        { signal },
+      ),
+    );
+  },
+
+  async getPriceMonitoringRunObservations(
+    runId: string,
+    params: { include_unmatched?: boolean; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<RunPriceObservationsResponse> {
+    return normalizeRunPriceObservationsResponse(
+      await request<unknown>(
+        appendQuery(
+          `/price-monitoring/runs/${encodeURIComponent(runId)}/observations`,
+          params,
+        ),
+        { signal },
+      ),
+    );
+  },
+
+  async getPriceMonitoringRunCatalogSnapshot(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<CatalogSnapshotResponse> {
+    return normalizeCatalogSnapshotResponse(
+      await request<unknown>(
+        `/price-monitoring/runs/${encodeURIComponent(runId)}/catalog-snapshot`,
+        { signal },
+      ),
+    );
+  },
+
+  async getPriceMonitoringProductPriceHistory(
+    productId: string | number,
+    signal?: AbortSignal,
+  ): Promise<PriceHistoryResponse> {
+    return normalizePriceHistoryResponse(
+      await request<unknown>(
+        `/price-monitoring/products/${encodeURIComponent(String(productId))}/price-history`,
+        { signal },
+      ),
+    );
+  },
+
+  async getPriceMonitoringModelPriceHistory(
+    model: string,
+    params: { catalog_source?: string | null; include_unmatched?: boolean } = {},
+    signal?: AbortSignal,
+  ): Promise<PriceHistoryResponse> {
+    return normalizePriceHistoryResponse(
+      await request<unknown>(
+        appendQuery(
+          `/price-monitoring/products/by-model/${encodeURIComponent(model)}/price-history`,
+          params,
+        ),
+        { signal },
+      ),
     );
   },
 

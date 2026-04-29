@@ -12,10 +12,15 @@ import type {
   ArtifactRoot,
   CatalogBrandOption,
   CatalogCategoryHierarchyResponse,
+  CatalogSnapshot,
+  CatalogSnapshotResponse,
   ExportPriceMonitoringPriceUpdateResult,
   FetchPriceMonitoringResult,
   MarketplaceFilter,
   PathRootsResponse,
+  PriceMonitoringDbStatus,
+  PriceObservation,
+  PriceObservationMatchStatus,
   PriceMonitoringAction,
   PriceMonitoringReviewAction,
   PriceMonitoringReviewItem,
@@ -25,6 +30,7 @@ import type {
   PriceMonitoringSelectionItem,
   PriceMonitoringSelectionResult,
   PriceMonitoringSource,
+  RunPriceObservationsResponse,
 } from "../api/commerceTypes";
 import { ArtifactList } from "../components/ArtifactList";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
@@ -38,6 +44,7 @@ import {
 } from "../utils/categoryHierarchy";
 
 type SourceOverride = "" | PriceMonitoringSource;
+type StoredObservationMatchFilter = "all" | PriceObservationMatchStatus;
 
 interface RowActionState {
   selected_action: "" | PriceMonitoringAction;
@@ -57,24 +64,44 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
-function formatNumber(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+function parseNumberLike(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const parsed = Number(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function formatNumber(value: unknown): string {
+  const parsed = parseNumberLike(value);
+  if (parsed === null) {
     return "-";
   }
 
-  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+  return parsed.toLocaleString(undefined, { maximumFractionDigits: 2 });
 }
 
-function formatMoney(value: number | null | undefined): string {
-  if (typeof value !== "number" || !Number.isFinite(value)) {
+function formatMoney(value: unknown, currency = "EUR"): string {
+  const parsed = parseNumberLike(value);
+  if (parsed === null) {
     return "-";
   }
 
   return new Intl.NumberFormat(undefined, {
     style: "currency",
-    currency: "EUR",
+    currency,
     maximumFractionDigits: 2,
-  }).format(value);
+  }).format(parsed);
 }
 
 function parseModelText(value: string): string[] {
@@ -409,6 +436,46 @@ function RunSummaryBlock({
   );
 }
 
+function formatBoolean(value: unknown): string {
+  if (typeof value !== "boolean") {
+    return "-";
+  }
+
+  return value ? "Yes" : "No";
+}
+
+function formatPersistenceStatus(status: string): string {
+  if (status === "not_configured") {
+    return "DB not configured";
+  }
+
+  if (status === "persisted") {
+    return "Persisted";
+  }
+
+  if (status === "failed") {
+    return "Persistence failed";
+  }
+
+  return status;
+}
+
+function getPersistenceStatusClass(status: string): string {
+  if (status === "persisted") {
+    return "ok";
+  }
+
+  if (status === "not_configured") {
+    return "warning";
+  }
+
+  if (status === "failed") {
+    return "danger";
+  }
+
+  return "neutral";
+}
+
 function FetchResultBlock({
   result,
   onPreview,
@@ -433,9 +500,30 @@ function FetchResultBlock({
         <SummaryItem label="Enriched CSV" value={getArtifactPath(result.enriched_csv_path)} />
         <SummaryItem label="Fetch summary" value={getArtifactPath(result.fetch_summary_path)} />
         <SummaryItem label="Fetch result" value={getArtifactPath(result.fetch_result_path)} />
+        <SummaryItem label="Observations" value={result.observation_count} />
+        <SummaryItem label="Replaced observations" value={result.replaced_observation_count} />
+        <SummaryItem label="Catalog snapshot" value={result.catalog_snapshot_count} />
+        <SummaryItem label="Matched observations" value={result.matched_observation_count} />
+        <SummaryItem label="Unmatched observations" value={result.unmatched_observation_count} />
+        <SummaryItem label="Fetch attempt" value={result.fetch_attempt} />
+        <SummaryItem label="Was refetch" value={formatBoolean(result.was_refetch)} />
+        <SummaryItem label="Persistence" value={result.persistence_status} />
         <SummaryItem label="Started" value={result.started_at} />
         <SummaryItem label="Completed" value={result.completed_at} />
       </dl>
+      {result.persistence_status ? (
+        <p>
+          <span className={`status-badge ${getPersistenceStatusClass(result.persistence_status)}`}>
+            {formatPersistenceStatus(result.persistence_status)}
+          </span>
+        </p>
+      ) : null}
+      {result.persistence_status === "not_configured" ? (
+        <p className="form-warning">DB persistence is disabled. Fetch completed, but observations were not stored.</p>
+      ) : null}
+      {result.was_refetch ? (
+        <p className="muted">Refetch completed. Previous observations for this run were replaced.</p>
+      ) : null}
       {artifacts.length > 0 ? (
         <ArtifactList
           title="Fetch artifacts"
@@ -449,6 +537,16 @@ function FetchResultBlock({
           <strong>Warnings</strong>
           <ul>
             {result.warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {result.persistence_warnings && result.persistence_warnings.length > 0 ? (
+        <div className="compact-list">
+          <strong>Persistence warnings</strong>
+          <ul>
+            {result.persistence_warnings.map((warning) => (
               <li key={warning}>{warning}</li>
             ))}
           </ul>
@@ -544,6 +642,350 @@ function ExportResultBlock({
       ) : null}
       <p className="muted">This exports CSV only. OpenCart is not updated automatically.</p>
     </div>
+  );
+}
+
+function getCurrency(value: unknown): string {
+  return typeof value === "string" && /^[A-Z]{3}$/.test(value) ? value : "EUR";
+}
+
+function isObservationMatched(item: PriceObservation): boolean {
+  return item.is_matched === true || item.match_status === "matched";
+}
+
+function getStoredObservationKey(item: PriceObservation, index: number): string {
+  const id = item.id ?? `${item.run_id ?? "run"}-${item.model ?? "model"}-${item.source ?? "source"}`;
+  return `${id}-${index}`;
+}
+
+function filterStoredObservations(
+  items: PriceObservation[],
+  matchStatus: StoredObservationMatchFilter,
+  model: string,
+  mpn: string,
+): PriceObservation[] {
+  const modelFilter = model.trim().toLowerCase();
+  const mpnFilter = mpn.trim().toLowerCase();
+
+  return items.filter((item) => {
+    if (matchStatus === "matched" && !isObservationMatched(item)) {
+      return false;
+    }
+
+    if (matchStatus === "unmatched" && isObservationMatched(item)) {
+      return false;
+    }
+
+    if (modelFilter && !String(item.model ?? "").toLowerCase().includes(modelFilter)) {
+      return false;
+    }
+
+    if (mpnFilter && !String(item.mpn ?? "").toLowerCase().includes(mpnFilter)) {
+      return false;
+    }
+
+    return true;
+  });
+}
+
+function DbStatusSummary({
+  status,
+  error,
+}: {
+  status: PriceMonitoringDbStatus | null;
+  error: string | null;
+}) {
+  if (error) {
+    return <ErrorState message={error} />;
+  }
+
+  if (!status) {
+    return <EmptyState title="DB status unavailable" message="Status has not been loaded yet." />;
+  }
+
+  return (
+    <div className="state-block">
+      <strong>DB status</strong>
+      <div className="button-row">
+        <span className={`status-badge ${status.configured ? "ok" : "warning"}`}>
+          {status.configured ? "Configured" : "Not configured"}
+        </span>
+        <span className={`status-badge ${status.reachable ? "ok" : "warning"}`}>
+          {status.reachable ? "Reachable" : "Not reachable"}
+        </span>
+        {status.dialect ? <span className="status-badge neutral">{status.dialect}</span> : null}
+      </div>
+      {!status.configured ? (
+        <p className="form-warning">DB persistence is not configured. Stored observations are unavailable.</p>
+      ) : null}
+      {status.error ? <p className="muted">{status.error}</p> : null}
+    </div>
+  );
+}
+
+function ObservationTable({ items }: { items: PriceObservation[] }) {
+  if (items.length === 0) {
+    return <EmptyState title="No stored observations" message="No observations matched the current filters." />;
+  }
+
+  return (
+    <div className="table-wrap observation-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Match</th>
+            <th>Model</th>
+            <th>MPN</th>
+            <th>Product name</th>
+            <th>Source</th>
+            <th>Competitor / Store</th>
+            <th>Competitor price</th>
+            <th>Own price</th>
+            <th>Delta</th>
+            <th>Delta %</th>
+            <th>Availability</th>
+            <th>Product URL</th>
+            <th>Observed at</th>
+          </tr>
+        </thead>
+        <tbody>
+          {items.map((item, index) => {
+            const matched = isObservationMatched(item);
+            const currency = getCurrency(item.currency);
+
+            return (
+              <tr key={getStoredObservationKey(item, index)}>
+                <td>
+                  <span className={`status-badge ${matched ? "ok" : "warning"}`}>
+                    {matched ? "Matched" : "Unmatched"}
+                  </span>
+                </td>
+                <td className="nowrap-cell">{formatValue(item.model)}</td>
+                <td className="nowrap-cell">{formatValue(item.mpn)}</td>
+                <td>{formatValue(item.product_name)}</td>
+                <td>{formatValue(item.source)}</td>
+                <td>{formatValue(item.competitor_name)}</td>
+                <td className="nowrap-cell">{formatMoney(item.competitor_price, currency)}</td>
+                <td className="nowrap-cell">{formatMoney(item.own_price, currency)}</td>
+                <td className="nowrap-cell">{formatNumber(item.price_delta)}</td>
+                <td className="nowrap-cell">{formatNumber(item.price_delta_percent)}</td>
+                <td>{formatValue(item.availability)}</td>
+                <td>
+                  {item.product_url ? (
+                    <a href={item.product_url} target="_blank" rel="noreferrer">
+                      Open
+                    </a>
+                  ) : (
+                    "-"
+                  )}
+                </td>
+                <td className="nowrap-cell">{formatValue(item.observed_at)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function CatalogSnapshotTable({ snapshot }: { snapshot: CatalogSnapshotResponse | null }) {
+  const items = snapshot?.items ?? [];
+
+  return (
+    <details className="state-block catalog-snapshot-block" open>
+      <summary>
+        <strong>Catalog Snapshot</strong>
+        <span className="muted"> {formatValue(snapshot?.count ?? items.length)} rows</span>
+      </summary>
+      {items.length === 0 ? (
+        <EmptyState title="No catalog snapshot" message="No catalog snapshot rows were returned for this run." />
+      ) : (
+        <div className="table-wrap catalog-snapshot-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Match/Product ID</th>
+                <th>Model</th>
+                <th>MPN</th>
+                <th>Name</th>
+                <th>Manufacturer</th>
+                <th>Family</th>
+                <th>Category</th>
+                <th>Sub-Category</th>
+                <th>Marketplace</th>
+                <th>Own price</th>
+                <th>Created at</th>
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((item, index) => (
+                <tr key={`${item.id ?? item.product_id ?? item.model ?? "catalog"}-${index}`}>
+                  <td>
+                    {item.product_id ? (
+                      formatValue(item.product_id)
+                    ) : (
+                      <span className="status-badge warning">Missing</span>
+                    )}
+                  </td>
+                  <td className="nowrap-cell">{formatValue(item.model)}</td>
+                  <td className="nowrap-cell">{formatValue(item.mpn)}</td>
+                  <td>{formatValue(item.name)}</td>
+                  <td>{formatValue(item.manufacturer)}</td>
+                  <td>{formatValue(item.family)}</td>
+                  <td>{formatValue(item.category_name)}</td>
+                  <td>{formatValue(item.sub_category)}</td>
+                  <td>{formatValue(item.marketplace)}</td>
+                  <td className="nowrap-cell">{formatMoney(item.own_price, getCurrency(item.currency))}</td>
+                  <td className="nowrap-cell">{formatValue(item.created_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </details>
+  );
+}
+
+function StoredObservationsSection({
+  runId,
+  dbStatus,
+  dbStatusError,
+  isLoading,
+  observations,
+  catalogSnapshot,
+  observationError,
+  catalogSnapshotError,
+  fetchResult,
+  matchStatus,
+  includeUnmatched,
+  modelFilter,
+  mpnFilter,
+  onMatchStatusChange,
+  onIncludeUnmatchedChange,
+  onModelFilterChange,
+  onMpnFilterChange,
+  onRefresh,
+}: {
+  runId: string;
+  dbStatus: PriceMonitoringDbStatus | null;
+  dbStatusError: string | null;
+  isLoading: boolean;
+  observations: RunPriceObservationsResponse | null;
+  catalogSnapshot: CatalogSnapshotResponse | null;
+  observationError: string | null;
+  catalogSnapshotError: string | null;
+  fetchResult: FetchPriceMonitoringResult | null;
+  matchStatus: StoredObservationMatchFilter;
+  includeUnmatched: boolean;
+  modelFilter: string;
+  mpnFilter: string;
+  onMatchStatusChange: (value: StoredObservationMatchFilter) => void;
+  onIncludeUnmatchedChange: (value: boolean) => void;
+  onModelFilterChange: (value: string) => void;
+  onMpnFilterChange: (value: string) => void;
+  onRefresh: () => void;
+}) {
+  const filteredItems = filterStoredObservations(
+    observations?.items ?? [],
+    matchStatus,
+    modelFilter,
+    mpnFilter,
+  );
+
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Stored Observations</p>
+          <h3>Stored Observations</h3>
+        </div>
+        <button className="button secondary" type="button" disabled={isLoading} onClick={onRefresh}>
+          {isLoading ? "Refreshing..." : "Refresh"}
+        </button>
+      </div>
+
+      <DbStatusSummary status={dbStatus} error={dbStatusError} />
+
+      {!runId ? (
+        <EmptyState title="No run selected" message="Select or create a run to view stored observations." />
+      ) : (
+        <>
+          <dl className="summary-grid">
+            <SummaryItem label="Run ID" value={observations?.run_id ?? runId} />
+            <SummaryItem label="Total observations" value={observations?.count ?? fetchResult?.observation_count} />
+            <SummaryItem
+              label="Matched"
+              value={observations?.matched_count ?? fetchResult?.matched_observation_count}
+            />
+            <SummaryItem
+              label="Unmatched"
+              value={observations?.unmatched_count ?? fetchResult?.unmatched_observation_count}
+            />
+            <SummaryItem label="Fetch attempt" value={fetchResult?.fetch_attempt} />
+            <SummaryItem label="Was refetch" value={formatBoolean(fetchResult?.was_refetch)} />
+            <SummaryItem label="Replaced observations" value={fetchResult?.replaced_observation_count} />
+            <SummaryItem label="Persistence status" value={fetchResult?.persistence_status} />
+          </dl>
+
+          {fetchResult?.persistence_warnings && fetchResult.persistence_warnings.length > 0 ? (
+            <div className="compact-list">
+              <strong>Persistence warnings</strong>
+              <ul>
+                {fetchResult.persistence_warnings.map((warning) => (
+                  <li key={warning}>{warning}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
+          <div className="filter-grid">
+            <label>
+              Match status
+              <select
+                value={matchStatus}
+                onChange={(event) => onMatchStatusChange(event.target.value as StoredObservationMatchFilter)}
+              >
+                <option value="all">All</option>
+                <option value="matched">Matched</option>
+                <option value="unmatched">Unmatched</option>
+              </select>
+            </label>
+            <label className="checkbox-row">
+              <input
+                type="checkbox"
+                checked={includeUnmatched}
+                onChange={(event) => onIncludeUnmatchedChange(event.target.checked)}
+              />
+              Include unmatched
+            </label>
+            <label>
+              Model
+              <input
+                value={modelFilter}
+                onChange={(event) => onModelFilterChange(event.target.value)}
+                placeholder="Filter current run"
+              />
+            </label>
+            <label>
+              MPN
+              <input
+                value={mpnFilter}
+                onChange={(event) => onMpnFilterChange(event.target.value)}
+                placeholder="Filter current run"
+              />
+            </label>
+          </div>
+
+          {isLoading ? <LoadingState label="Loading stored observations..." /> : null}
+          {observationError ? <ErrorState message={observationError} onRetry={onRefresh} /> : null}
+          {!observationError && !isLoading ? <ObservationTable items={filteredItems} /> : null}
+          {catalogSnapshotError ? <ErrorState message={catalogSnapshotError} onRetry={onRefresh} /> : null}
+          {!catalogSnapshotError && !isLoading ? <CatalogSnapshotTable snapshot={catalogSnapshot} /> : null}
+        </>
+      )}
+    </section>
   );
 }
 
@@ -779,6 +1221,18 @@ export function PriceMonitoringPage() {
   const [pathRoots, setPathRoots] = useState<PathRootsResponse | null>(null);
   const [pathRootsError, setPathRootsError] = useState<string | null>(null);
   const [isPathRootsLoading, setIsPathRootsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<PriceMonitoringDbStatus | null>(null);
+  const [dbStatusError, setDbStatusError] = useState<string | null>(null);
+  const [storedObservations, setStoredObservations] =
+    useState<RunPriceObservationsResponse | null>(null);
+  const [catalogSnapshot, setCatalogSnapshot] = useState<CatalogSnapshotResponse | null>(null);
+  const [storedObservationError, setStoredObservationError] = useState<string | null>(null);
+  const [catalogSnapshotError, setCatalogSnapshotError] = useState<string | null>(null);
+  const [isStoredObservationLoading, setIsStoredObservationLoading] = useState(false);
+  const [storedMatchStatus, setStoredMatchStatus] = useState<StoredObservationMatchFilter>("all");
+  const [includeUnmatchedObservations, setIncludeUnmatchedObservations] = useState(true);
+  const [storedModelFilter, setStoredModelFilter] = useState("");
+  const [storedMpnFilter, setStoredMpnFilter] = useState("");
 
   const loadFilters = useCallback(async (signal?: AbortSignal) => {
     setAreFiltersLoading(true);
@@ -866,13 +1320,96 @@ export function PriceMonitoringPage() {
     }
   }, []);
 
+  const loadDbStatus = useCallback(async (signal?: AbortSignal) => {
+    setDbStatusError(null);
+    try {
+      const status = await commerceClient.getPriceMonitoringDbStatus(signal);
+      if (signal?.aborted) {
+        return null;
+      }
+
+      setDbStatus(status);
+      return status;
+    } catch (error) {
+      if (!signal?.aborted) {
+        setDbStatus(null);
+        setDbStatusError(getCommerceApiErrorMessage(error));
+      }
+      return null;
+    }
+  }, []);
+
+  const loadStoredObservations = useCallback(
+    async (runId = currentRunId.trim(), signal?: AbortSignal) => {
+      setIsStoredObservationLoading(true);
+      setStoredObservationError(null);
+      setCatalogSnapshotError(null);
+
+      const statusPromise = loadDbStatus(signal);
+
+      if (!runId) {
+        setStoredObservations(null);
+        setCatalogSnapshot(null);
+        await statusPromise;
+        if (!signal?.aborted) {
+          setIsStoredObservationLoading(false);
+        }
+        return;
+      }
+
+      const [observationResult, snapshotResult] = await Promise.allSettled([
+        commerceClient.getPriceMonitoringRunObservations(
+          runId,
+          {
+            include_unmatched: includeUnmatchedObservations,
+            limit: 1000,
+            offset: 0,
+          },
+          signal,
+        ),
+        commerceClient.getPriceMonitoringRunCatalogSnapshot(runId, signal),
+      ]);
+      await statusPromise;
+
+      if (signal?.aborted) {
+        return;
+      }
+
+      if (observationResult.status === "fulfilled") {
+        setStoredObservations(observationResult.value);
+      } else {
+        setStoredObservations(null);
+        setStoredObservationError(getCommerceApiErrorMessage(observationResult.reason));
+      }
+
+      if (snapshotResult.status === "fulfilled") {
+        setCatalogSnapshot(snapshotResult.value);
+      } else {
+        setCatalogSnapshot(null);
+        setCatalogSnapshotError(
+          `Catalog snapshot failed: ${getCommerceApiErrorMessage(snapshotResult.reason)}`,
+        );
+      }
+
+      setIsStoredObservationLoading(false);
+    },
+    [currentRunId, includeUnmatchedObservations, loadDbStatus],
+  );
+
   useEffect(() => {
     const controller = new AbortController();
     void loadFilters(controller.signal);
     void loadRuns(controller.signal);
     void loadPathRoots(controller.signal);
+    void loadDbStatus(controller.signal);
     return () => controller.abort();
-  }, [loadFilters, loadPathRoots, loadRuns]);
+  }, [loadDbStatus, loadFilters, loadPathRoots, loadRuns]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    void loadStoredObservations(currentRunId.trim(), controller.signal);
+    return () => controller.abort();
+  }, [currentRunId, includeUnmatchedObservations, loadStoredObservations]);
 
   const buildSelectionBody = (dryRun: boolean) =>
     makeSelectionBody({
@@ -1030,6 +1567,7 @@ export function PriceMonitoringPage() {
         setEnrichedCsvPath(nextEnrichedCsvPath);
       }
       await refreshRunArtifacts(runId);
+      await loadStoredObservations(runId);
     } catch (error) {
       setFetchError(getCommerceApiErrorMessage(error));
     } finally {
@@ -1615,6 +2153,27 @@ export function PriceMonitoringPage() {
         ) : null}
         {fetchResult ? <FetchResultBlock result={fetchResult} onPreview={previewArtifact} /> : null}
       </section>
+
+      <StoredObservationsSection
+        runId={currentRunId.trim()}
+        dbStatus={dbStatus}
+        dbStatusError={dbStatusError}
+        isLoading={isStoredObservationLoading}
+        observations={storedObservations}
+        catalogSnapshot={catalogSnapshot}
+        observationError={storedObservationError}
+        catalogSnapshotError={catalogSnapshotError}
+        fetchResult={fetchResult}
+        matchStatus={storedMatchStatus}
+        includeUnmatched={includeUnmatchedObservations}
+        modelFilter={storedModelFilter}
+        mpnFilter={storedMpnFilter}
+        onMatchStatusChange={setStoredMatchStatus}
+        onIncludeUnmatchedChange={setIncludeUnmatchedObservations}
+        onModelFilterChange={setStoredModelFilter}
+        onMpnFilterChange={setStoredMpnFilter}
+        onRefresh={() => void loadStoredObservations(currentRunId.trim())}
+      />
 
       <section className="panel">
         <div className="section-heading">

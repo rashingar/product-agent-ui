@@ -185,8 +185,114 @@ export interface FetchPriceMonitoringResult {
   fetch_result_path?: ArtifactPayload | string | null;
   started_at?: string | null;
   completed_at?: string | null;
+  observation_count?: number;
+  replaced_observation_count?: number;
+  catalog_snapshot_count?: number | null;
+  matched_observation_count?: number;
+  unmatched_observation_count?: number;
+  was_refetch?: boolean;
+  fetch_attempt?: number;
+  persistence_status?: "not_configured" | "persisted" | "failed" | string | null;
+  persistence_warnings?: string[];
   warnings?: string[];
   [key: string]: unknown;
+}
+
+export interface PriceMonitoringDbStatus {
+  configured: boolean;
+  reachable: boolean;
+  dialect?: string | null;
+  error?: string | null;
+}
+
+export type PriceObservationMatchStatus = "matched" | "unmatched";
+
+export interface PriceObservation {
+  id?: number | string;
+  product_id?: number | string | null;
+  run_id?: string | number | null;
+  catalog_source?: string | null;
+  source?: string | null;
+  model?: string | null;
+  mpn?: string | null;
+  product_name?: string | null;
+  competitor_name?: string | null;
+  competitor_price?: number | string | null;
+  own_price?: number | string | null;
+  price_delta?: number | string | null;
+  price_delta_percent?: number | string | null;
+  currency?: string | null;
+  availability?: string | null;
+  product_url?: string | null;
+  matched_by?: "model" | "mpn" | string | null;
+  match_status?: PriceObservationMatchStatus | string | null;
+  is_matched?: boolean | null;
+  observed_at?: string | null;
+  created_at?: string | null;
+  raw_observation?: Record<string, unknown> | null;
+  [key: string]: unknown;
+}
+
+export interface PriceObservationsParams {
+  run_id?: string | null;
+  source?: string | null;
+  catalog_source?: string | null;
+  model?: string | null;
+  mpn?: string | null;
+  product_id?: string | number | null;
+  match_status?: PriceObservationMatchStatus | "all" | null;
+  include_unmatched?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+export interface PriceObservationsResponse {
+  items: PriceObservation[];
+  limit?: number;
+  offset?: number;
+  count: number;
+}
+
+export interface RunPriceObservationsResponse {
+  run_id?: string | number | null;
+  items: PriceObservation[];
+  count: number;
+  matched_count?: number;
+  unmatched_count?: number;
+}
+
+export interface CatalogSnapshot {
+  id?: number | string;
+  product_id?: number | string | null;
+  run_id?: string | number | null;
+  catalog_source?: string | null;
+  model?: string | null;
+  mpn?: string | null;
+  name?: string | null;
+  manufacturer?: string | null;
+  family?: string | null;
+  category_name?: string | null;
+  sub_category?: string | null;
+  marketplace?: string | null;
+  own_price?: number | string | null;
+  currency?: string | null;
+  raw_catalog_row?: Record<string, unknown> | null;
+  created_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface CatalogSnapshotResponse {
+  run_id?: string | number | null;
+  items: CatalogSnapshot[];
+  count: number;
+}
+
+export interface PriceHistoryResponse {
+  product_id?: string | number | null;
+  model?: string | null;
+  catalog_source?: string | null;
+  items: PriceObservation[];
+  count: number;
 }
 
 export interface PriceMonitoringReviewParams {

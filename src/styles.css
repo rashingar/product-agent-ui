@@ -565,6 +565,19 @@ textarea {
   min-width: 1900px;
 }
 
+.observation-table-wrap table {
+  min-width: 1680px;
+}
+
+.catalog-snapshot-table-wrap table {
+  min-width: 1420px;
+}
+
+.catalog-snapshot-block summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
 .review-table-wrap select {
   min-width: 150px;
   border: 1px solid var(--border);
@@ -597,6 +610,16 @@ textarea {
   padding: 12px;
   background: var(--danger-bg);
   color: var(--danger-text);
+}
+
+.form-warning {
+  border: 1px solid #f0d27a;
+  border-radius: 8px;
+  margin: 0;
+  padding: 12px;
+  background: var(--warning-bg);
+  color: var(--warning-text);
+  font-weight: 700;
 }
 
 .state-block {
