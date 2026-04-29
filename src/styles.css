@@ -566,7 +566,15 @@ textarea {
 }
 
 .observation-table-wrap table {
-  min-width: 1680px;
+  min-width: 1810px;
+}
+
+.alert-events-table-wrap table {
+  min-width: 1780px;
+}
+
+.alert-rules-table-wrap table {
+  min-width: 1240px;
 }
 
 .catalog-snapshot-table-wrap table {
@@ -748,6 +756,10 @@ th {
 }
 
 .diagnostics-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.alert-summary-grid {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
@@ -1012,6 +1024,7 @@ code {
   .catalog-summary-grid,
   .csv-metadata-grid,
   .diagnostics-summary-grid,
+  .alert-summary-grid,
   .artifact-preview-meta,
   .column-controls-panel,
   .filter-grid,

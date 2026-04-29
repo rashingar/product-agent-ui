@@ -7,6 +7,7 @@ const platformNavItems = [
   { to: "/catalog", label: "Catalog" },
   { to: "/csv-bridge", label: "CSV/Bridge" },
   { to: "/price-monitoring", label: "Price Monitoring" },
+  { to: "/price-monitoring/alerts", label: "Price Alerts" },
   { to: "/product-agent", label: "Product-Agent" },
 ];
 
@@ -49,7 +50,7 @@ export function AppShell() {
                   item.to === "/product-agent" && isProductAgentSection;
                 return isActive || isProductAgentActive ? "nav-link active" : "nav-link";
               }}
-              end={item.to === "/"}
+              end={item.to === "/" || item.to === "/price-monitoring"}
             >
               {item.label}
             </NavLink>

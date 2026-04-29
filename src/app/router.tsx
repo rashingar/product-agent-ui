@@ -8,6 +8,7 @@ import { JobsPage } from "../pages/JobsPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
 import { PipelineJobPage } from "../pages/PipelineJobPage";
 import { PrepareJobPage } from "../pages/PrepareJobPage";
+import { PriceMonitoringAlertsPage } from "../pages/PriceMonitoringAlertsPage";
 import { PriceMonitoringPage } from "../pages/PriceMonitoringPage";
 import { PublishJobPage } from "../pages/PublishJobPage";
 import { RenderJobPage } from "../pages/RenderJobPage";
@@ -21,6 +22,7 @@ export const router = createBrowserRouter([
       { path: "catalog", element: <CatalogPage /> },
       { path: "csv-bridge", element: <CsvBridgePage /> },
       { path: "price-monitoring", element: <PriceMonitoringPage /> },
+      { path: "price-monitoring/alerts", element: <PriceMonitoringAlertsPage /> },
       { path: "product-agent", element: <JobsPage /> },
       { path: "pipeline", element: <PipelineJobPage /> },
       { path: "prepare", element: <PrepareJobPage /> },

@@ -1,4 +1,9 @@
 import type {
+  AlertEvent,
+  AlertEventStatus,
+  AlertEventsResponse,
+  AlertRule,
+  AlertRulesResponse,
   ApplyPriceMonitoringReviewActionsBody,
   ApplyPriceMonitoringReviewActionsResult,
   ArtifactItem,
@@ -20,6 +25,8 @@ import type {
   CatalogSnapshotResponse,
   CatalogSubCategoryNode,
   CatalogSummary,
+  CreateAlertRuleBody,
+  EvaluateAlertsResponse,
   ExportPriceMonitoringPriceUpdateBody,
   ExportPriceMonitoringPriceUpdateResult,
   FetchPriceMonitoringBody,
@@ -47,6 +54,7 @@ import type {
   SaveCsvCopyBody,
   SaveCsvFileBody,
   SaveCsvResponse,
+  UpdateAlertRuleBody,
 } from "./commerceTypes";
 
 const DEFAULT_COMMERCE_API_BASE_URL = "/commerce-api";
@@ -713,6 +721,143 @@ function normalizePriceHistoryResponse(payload: unknown): PriceHistoryResponse {
   };
 }
 
+function normalizeNullableString(value: unknown): string | null {
+  return typeof value === "string" || typeof value === "number" ? String(value) : null;
+}
+
+function normalizeNullableId(value: unknown): string | number | null {
+  return typeof value === "string" || typeof value === "number" ? value : null;
+}
+
+function normalizeAlertRule(value: unknown): AlertRule | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    id: typeof value.id === "string" || typeof value.id === "number" ? value.id : undefined,
+    name: typeof value.name === "string" || value.name === null ? value.name : null,
+    rule_type:
+      typeof value.rule_type === "string" ? value.rule_type : "competitor_below_own_price",
+    product_id: normalizeNullableId(value.product_id),
+    catalog_source: normalizeNullableString(value.catalog_source),
+    model: normalizeNullableString(value.model),
+    mpn: normalizeNullableString(value.mpn),
+    threshold_amount:
+      typeof value.threshold_amount === "string" || typeof value.threshold_amount === "number"
+        ? value.threshold_amount
+        : null,
+    threshold_percent:
+      typeof value.threshold_percent === "string" || typeof value.threshold_percent === "number"
+        ? value.threshold_percent
+        : null,
+    active: typeof value.active === "boolean" ? value.active : null,
+    created_at: normalizeNullableString(value.created_at),
+    updated_at: normalizeNullableString(value.updated_at),
+  };
+}
+
+function normalizeAlertRulesResponse(payload: unknown): AlertRulesResponse {
+  const source = isRecord(payload) ? payload : {};
+  const items = getArrayPayload(payload, ["items", "rules", "data", "results"])
+    .map(normalizeAlertRule)
+    .filter((item): item is AlertRule => item !== null);
+
+  return {
+    items,
+    count: toNumber(source.count, items.length),
+    limit: toNumber(source.limit, items.length || 100),
+    offset: toNumber(source.offset, 0),
+  };
+}
+
+function normalizeAlertEvent(value: unknown): AlertEvent | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    id: typeof value.id === "string" || typeof value.id === "number" ? value.id : undefined,
+    alert_rule_id: normalizeNullableId(value.alert_rule_id),
+    monitoring_run_id: normalizeNullableId(value.monitoring_run_id),
+    price_observation_id: normalizeNullableId(value.price_observation_id),
+    product_id: normalizeNullableId(value.product_id),
+    run_id: normalizeNullableId(value.run_id),
+    catalog_source: normalizeNullableString(value.catalog_source),
+    model: normalizeNullableString(value.model),
+    mpn: normalizeNullableString(value.mpn),
+    source: normalizeNullableString(value.source),
+    competitor_name: normalizeNullableString(value.competitor_name),
+    competitor_price:
+      typeof value.competitor_price === "string" || typeof value.competitor_price === "number"
+        ? value.competitor_price
+        : null,
+    own_price:
+      typeof value.own_price === "string" || typeof value.own_price === "number"
+        ? value.own_price
+        : null,
+    price_delta:
+      typeof value.price_delta === "string" || typeof value.price_delta === "number"
+        ? value.price_delta
+        : null,
+    price_delta_percent:
+      typeof value.price_delta_percent === "string" || typeof value.price_delta_percent === "number"
+        ? value.price_delta_percent
+        : null,
+    severity: normalizeNullableString(value.severity),
+    status: normalizeNullableString(value.status),
+    message: normalizeNullableString(value.message),
+    dedupe_key: normalizeNullableString(value.dedupe_key),
+    triggered_at: normalizeNullableString(value.triggered_at),
+    acknowledged_at: normalizeNullableString(value.acknowledged_at),
+    acknowledged_by: normalizeNullableString(value.acknowledged_by),
+    resolved_at: normalizeNullableString(value.resolved_at),
+    resolved_by: normalizeNullableString(value.resolved_by),
+    raw_context: isRecord(value.raw_context) ? value.raw_context : null,
+    created_at: normalizeNullableString(value.created_at),
+    updated_at: normalizeNullableString(value.updated_at),
+  };
+}
+
+function normalizeAlertEventsResponse(payload: unknown): AlertEventsResponse {
+  const source = isRecord(payload) ? payload : {};
+  const items = getArrayPayload(payload, ["items", "events", "data", "results"])
+    .map(normalizeAlertEvent)
+    .filter((item): item is AlertEvent => item !== null);
+
+  return {
+    items,
+    count: toNumber(source.count, items.length),
+    limit: toNumber(source.limit, items.length || 100),
+    offset: toNumber(source.offset, 0),
+  };
+}
+
+function normalizeEvaluateAlertsResponse(payload: unknown): EvaluateAlertsResponse {
+  if (!isRecord(payload)) {
+    return {
+      warnings: [],
+    };
+  }
+
+  return {
+    ...payload,
+    run_id:
+      typeof payload.run_id === "string" || typeof payload.run_id === "number"
+        ? payload.run_id
+        : null,
+    status: typeof payload.status === "string" ? payload.status : null,
+    evaluated_rule_count: toNumber(payload.evaluated_rule_count, 0),
+    evaluated_observation_count: toNumber(payload.evaluated_observation_count, 0),
+    created_event_count: toNumber(payload.created_event_count, 0),
+    duplicate_event_count: toNumber(payload.duplicate_event_count, 0),
+    skipped_count: toNumber(payload.skipped_count, 0),
+    warnings: normalizeStringArray(payload.warnings),
+  };
+}
+
 function normalizeApplyReviewActionsResult(payload: unknown): ApplyPriceMonitoringReviewActionsResult {
   if (!isRecord(payload)) {
     return {};
@@ -1134,6 +1279,155 @@ export const commerceClient = {
           params,
         ),
         { signal },
+      ),
+    );
+  },
+
+  async listPriceMonitoringAlertRules(
+    params: { active?: boolean | null; rule_type?: string | null; limit?: number; offset?: number } = {},
+    signal?: AbortSignal,
+  ): Promise<AlertRulesResponse> {
+    return normalizeAlertRulesResponse(
+      await request<unknown>(
+        appendQuery("/price-monitoring/alerts/rules", params as QueryParams),
+        { signal },
+      ),
+    );
+  },
+
+  async createPriceMonitoringAlertRule(
+    body: CreateAlertRuleBody,
+    signal?: AbortSignal,
+  ): Promise<AlertRule> {
+    return (
+      normalizeAlertRule(
+        await request<unknown>("/price-monitoring/alerts/rules", {
+          method: "POST",
+          body,
+          signal,
+        }),
+      ) ?? {}
+    );
+  },
+
+  async getPriceMonitoringAlertRule(
+    ruleId: string | number,
+    signal?: AbortSignal,
+  ): Promise<AlertRule> {
+    return (
+      normalizeAlertRule(
+        await request<unknown>(
+          `/price-monitoring/alerts/rules/${encodeURIComponent(String(ruleId))}`,
+          { signal },
+        ),
+      ) ?? {}
+    );
+  },
+
+  async updatePriceMonitoringAlertRule(
+    ruleId: string | number,
+    body: UpdateAlertRuleBody,
+    signal?: AbortSignal,
+  ): Promise<AlertRule> {
+    return (
+      normalizeAlertRule(
+        await request<unknown>(
+          `/price-monitoring/alerts/rules/${encodeURIComponent(String(ruleId))}`,
+          {
+            method: "PATCH",
+            body,
+            signal,
+          },
+        ),
+      ) ?? {}
+    );
+  },
+
+  async deactivatePriceMonitoringAlertRule(
+    ruleId: string | number,
+    signal?: AbortSignal,
+  ): Promise<AlertRule> {
+    return (
+      normalizeAlertRule(
+        await request<unknown>(
+          `/price-monitoring/alerts/rules/${encodeURIComponent(String(ruleId))}/deactivate`,
+          {
+            method: "POST",
+            signal,
+          },
+        ),
+      ) ?? {}
+    );
+  },
+
+  async listPriceMonitoringAlertEvents(
+    params: {
+      status?: AlertEventStatus | "all" | null;
+      run_id?: string | null;
+      product_id?: string | number | null;
+      model?: string | null;
+      limit?: number;
+      offset?: number;
+    } = {},
+    signal?: AbortSignal,
+  ): Promise<AlertEventsResponse> {
+    return normalizeAlertEventsResponse(
+      await request<unknown>(
+        appendQuery("/price-monitoring/alerts/events", params as QueryParams),
+        { signal },
+      ),
+    );
+  },
+
+  async acknowledgePriceMonitoringAlertEvent(
+    eventId: string | number,
+    body: { acknowledged_by?: string | null } = {},
+    signal?: AbortSignal,
+  ): Promise<AlertEvent> {
+    return (
+      normalizeAlertEvent(
+        await request<unknown>(
+          `/price-monitoring/alerts/events/${encodeURIComponent(String(eventId))}/acknowledge`,
+          {
+            method: "POST",
+            body,
+            signal,
+          },
+        ),
+      ) ?? {}
+    );
+  },
+
+  async resolvePriceMonitoringAlertEvent(
+    eventId: string | number,
+    body: { resolved_by?: string | null } = {},
+    signal?: AbortSignal,
+  ): Promise<AlertEvent> {
+    return (
+      normalizeAlertEvent(
+        await request<unknown>(
+          `/price-monitoring/alerts/events/${encodeURIComponent(String(eventId))}/resolve`,
+          {
+            method: "POST",
+            body,
+            signal,
+          },
+        ),
+      ) ?? {}
+    );
+  },
+
+  async evaluatePriceMonitoringAlertsForRun(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<EvaluateAlertsResponse> {
+    return normalizeEvaluateAlertsResponse(
+      await request<unknown>(
+        `/price-monitoring/alerts/evaluate/${encodeURIComponent(runId)}`,
+        {
+          method: "POST",
+          signal,
+        },
       ),
     );
   },

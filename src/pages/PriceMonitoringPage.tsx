@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import {
   CommerceApiError,
   commerceClient,
@@ -658,6 +659,35 @@ function getStoredObservationKey(item: PriceObservation, index: number): string 
   return `${id}-${index}`;
 }
 
+function getCreateAlertLink(item: PriceObservation): string {
+  const params = new URLSearchParams();
+  const model = typeof item.model === "string" ? item.model.trim() : "";
+  const mpn = typeof item.mpn === "string" ? item.mpn.trim() : "";
+  const catalogSource =
+    typeof item.catalog_source === "string" && item.catalog_source.trim().length > 0
+      ? item.catalog_source.trim()
+      : typeof item.source === "string"
+        ? item.source.trim()
+        : "";
+
+  if (item.product_id !== null && item.product_id !== undefined && item.product_id !== "") {
+    params.set("product_id", String(item.product_id));
+  } else if (catalogSource && model) {
+    params.set("catalog_source", catalogSource);
+    params.set("model", model);
+  } else if (catalogSource && mpn) {
+    params.set("catalog_source", catalogSource);
+    params.set("mpn", mpn);
+  }
+
+  if (model) {
+    params.set("name", `Competitor below own price - ${model}`);
+  }
+
+  const query = params.toString();
+  return query ? `/price-monitoring/alerts?${query}` : "/price-monitoring/alerts";
+}
+
 function filterStoredObservations(
   items: PriceObservation[],
   matchStatus: StoredObservationMatchFilter,
@@ -746,6 +776,7 @@ function ObservationTable({ items }: { items: PriceObservation[] }) {
             <th>Availability</th>
             <th>Product URL</th>
             <th>Observed at</th>
+            <th>Actions</th>
           </tr>
         </thead>
         <tbody>
@@ -780,6 +811,11 @@ function ObservationTable({ items }: { items: PriceObservation[] }) {
                   )}
                 </td>
                 <td className="nowrap-cell">{formatValue(item.observed_at)}</td>
+                <td>
+                  <Link className="button secondary" to={getCreateAlertLink(item)}>
+                    Create alert
+                  </Link>
+                </td>
               </tr>
             );
           })}

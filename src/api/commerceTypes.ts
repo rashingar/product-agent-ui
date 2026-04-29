@@ -295,6 +295,96 @@ export interface PriceHistoryResponse {
   count: number;
 }
 
+export type AlertRuleType = "competitor_below_own_price";
+
+export type AlertEventStatus = "open" | "acknowledged" | "resolved";
+
+export interface AlertRule {
+  id?: number | string;
+  name?: string | null;
+  rule_type?: AlertRuleType | string;
+  product_id?: number | string | null;
+  catalog_source?: string | null;
+  model?: string | null;
+  mpn?: string | null;
+  threshold_amount?: number | string | null;
+  threshold_percent?: number | string | null;
+  active?: boolean | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface AlertEvent {
+  id?: number | string;
+  alert_rule_id?: number | string | null;
+  monitoring_run_id?: number | string | null;
+  price_observation_id?: number | string | null;
+  product_id?: number | string | null;
+  run_id?: string | number | null;
+  catalog_source?: string | null;
+  model?: string | null;
+  mpn?: string | null;
+  source?: string | null;
+  competitor_name?: string | null;
+  competitor_price?: number | string | null;
+  own_price?: number | string | null;
+  price_delta?: number | string | null;
+  price_delta_percent?: number | string | null;
+  severity?: string | null;
+  status?: AlertEventStatus | string | null;
+  message?: string | null;
+  dedupe_key?: string | null;
+  triggered_at?: string | null;
+  acknowledged_at?: string | null;
+  acknowledged_by?: string | null;
+  resolved_at?: string | null;
+  resolved_by?: string | null;
+  raw_context?: Record<string, unknown> | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface AlertRulesResponse {
+  items: AlertRule[];
+  count: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface AlertEventsResponse {
+  items: AlertEvent[];
+  count: number;
+  limit?: number;
+  offset?: number;
+}
+
+export interface CreateAlertRuleBody {
+  name: string | null;
+  rule_type: "competitor_below_own_price";
+  product_id: number | null;
+  catalog_source: string | null;
+  model: string | null;
+  mpn: string | null;
+  threshold_amount: number | string | null;
+  threshold_percent: number | string | null;
+  active: boolean;
+}
+
+export type UpdateAlertRuleBody = Partial<CreateAlertRuleBody>;
+
+export interface EvaluateAlertsResponse {
+  run_id?: string | number | null;
+  status?: string | null;
+  evaluated_rule_count?: number;
+  evaluated_observation_count?: number;
+  created_event_count?: number;
+  duplicate_event_count?: number;
+  skipped_count?: number;
+  warnings?: string[];
+}
+
 export interface PriceMonitoringReviewParams {
   enriched_csv_path?: string | null;
 }
