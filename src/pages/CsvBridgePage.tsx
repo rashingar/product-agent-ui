@@ -230,6 +230,10 @@ function bridgeArtifactToItem(artifact: BridgeArtifact): ArtifactItem | null {
     modified_at: artifact.modified_at ?? null,
     download_url: artifact.download_url ?? null,
     read_url: artifact.read_url ?? null,
+    is_allowed: artifact.is_allowed === false ? false : true,
+    can_read: artifact.can_read === false ? false : true,
+    can_download: artifact.can_download === false ? false : true,
+    warning: artifact.warning ?? null,
   };
 }
 

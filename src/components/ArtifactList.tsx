@@ -52,6 +52,26 @@ function getExtension(item: ArtifactItem): string {
   return dotIndex >= 0 ? item.name.slice(dotIndex).toLowerCase() : "";
 }
 
+function formatArtifactWarning(warning: string | null | undefined): string {
+  if (!warning) {
+    return "Unavailable";
+  }
+
+  if (warning === "outside_configured_artifact_roots") {
+    return "Outside configured artifact roots";
+  }
+
+  return warning
+    .replace(/[_-]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .replace(/^\w/, (first) => first.toUpperCase());
+}
+
+function getArtifactStatus(item: ArtifactItem): string {
+  return item.is_allowed ? "Available" : `Disabled - ${formatArtifactWarning(item.warning)}`;
+}
+
 export function ArtifactList({
   title,
   items,
@@ -64,6 +84,10 @@ export function ArtifactList({
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const preview = async (item: ArtifactItem) => {
+    if (!item.is_allowed || !item.can_read) {
+      return;
+    }
+
     setIsPreviewLoading(true);
     setPreviewTitle(item.name);
     setPreviewState({ item, content: null, viewAsText: false });
@@ -96,6 +120,7 @@ export function ArtifactList({
             <thead>
               <tr>
                 <th>Name</th>
+                <th>Status</th>
                 <th>Extension</th>
                 <th>Size</th>
                 <th>Modified</th>
@@ -105,14 +130,27 @@ export function ArtifactList({
             <tbody>
               {items.map((item, index) => {
                 const extension = getExtension(item);
-                const canPreview = TEXT_EXTENSIONS.has(extension);
-                const downloadPath = item.download_url || item.path;
+                const canPreview =
+                  item.is_allowed &&
+                  item.can_read &&
+                  TEXT_EXTENSIONS.has(extension) &&
+                  Boolean(item.read_url || item.path);
+                const canDownload =
+                  item.is_allowed &&
+                  item.can_download &&
+                  Boolean(item.download_url || item.path);
+                const downloadUrl = item.download_url || getDownloadUrl(item.path);
 
                 return (
                   <tr key={`${item.path}-${index}`}>
                     <td>
                       <strong>{item.name}</strong>
                       <small className="artifact-path">{item.path}</small>
+                    </td>
+                    <td>
+                      <span className={`status-badge ${item.is_allowed ? "ok" : "warning"}`}>
+                        {getArtifactStatus(item)}
+                      </span>
                     </td>
                     <td>{formatValue(extension)}</td>
                     <td>{formatSize(item.size_bytes)}</td>
@@ -127,15 +165,26 @@ export function ArtifactList({
                         >
                           Preview
                         </button>
-                        <a
-                          className="button secondary"
-                          href={getDownloadUrl(downloadPath)}
-                          target="_blank"
-                          rel="noreferrer"
-                        >
-                          Download
-                        </a>
+                        {canDownload ? (
+                          <a
+                            className="button secondary"
+                            href={downloadUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Download
+                          </a>
+                        ) : (
+                          <span className="button secondary disabled-link" aria-disabled="true">
+                            Download
+                          </span>
+                        )}
                       </div>
+                      {!item.is_allowed ? (
+                        <small className="artifact-warning">
+                          {formatArtifactWarning(item.warning)}
+                        </small>
+                      ) : null}
                     </td>
                   </tr>
                 );
@@ -196,6 +245,7 @@ function ArtifactPreviewContent({
   downloadUrl: string;
 }) {
   const extension = getExtension(item);
+  const canDownload = item.is_allowed && item.can_download && downloadUrl.trim().length > 0;
 
   if (extension === ".csv" && !viewAsText) {
     const preview = parseCsvPreview(content);
@@ -228,9 +278,11 @@ function ArtifactPreviewContent({
               <button className="button secondary" type="button" onClick={onToggleText}>
                 View as text
               </button>
-              <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
-                Download
-              </a>
+              {canDownload ? (
+                <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
+                  Download
+                </a>
+              ) : null}
             </div>
           </div>
 
@@ -278,9 +330,11 @@ function ArtifactPreviewContent({
           <button className="button secondary" type="button" onClick={onToggleText}>
             View raw text
           </button>
-          <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
-            Download
-          </a>
+          {canDownload ? (
+            <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
+              Download
+            </a>
+          ) : null}
         </div>
         <pre className="json-block">{formatted}</pre>
       </div>
@@ -295,9 +349,11 @@ function ArtifactPreviewContent({
             {viewAsText ? "View parsed" : "View as text"}
           </button>
         ) : null}
-        <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
-          Download
-        </a>
+        {canDownload ? (
+          <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
+            Download
+          </a>
+        ) : null}
       </div>
       <pre className="json-block">{content}</pre>
     </div>

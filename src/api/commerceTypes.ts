@@ -179,10 +179,10 @@ export interface FetchPriceMonitoringBody {
 export interface FetchPriceMonitoringResult {
   status?: string | null;
   source?: PriceMonitoringSource | string | null;
-  input_csv_path?: string | null;
-  enriched_csv_path?: string | null;
-  fetch_summary_path?: string | null;
-  fetch_result_path?: string | null;
+  input_csv_path?: ArtifactPayload | string | null;
+  enriched_csv_path?: ArtifactPayload | string | null;
+  fetch_summary_path?: ArtifactPayload | string | null;
+  fetch_result_path?: ArtifactPayload | string | null;
   started_at?: string | null;
   completed_at?: string | null;
   warnings?: string[];
@@ -217,8 +217,8 @@ export interface PriceMonitoringReviewResponse {
   run_id?: string | number | null;
   items: PriceMonitoringReviewItem[];
   summary?: Record<string, number>;
-  review_csv_path?: string | null;
-  enriched_csv_path?: string | null;
+  review_csv_path?: ArtifactPayload | string | null;
+  enriched_csv_path?: ArtifactPayload | string | null;
   [key: string]: unknown;
 }
 
@@ -236,8 +236,8 @@ export interface ApplyPriceMonitoringReviewActionsBody {
 
 export interface ApplyPriceMonitoringReviewActionsResult {
   status?: string | null;
-  review_csv_path?: string | null;
-  review_actions_path?: string | null;
+  review_csv_path?: ArtifactPayload | string | null;
+  review_actions_path?: ArtifactPayload | string | null;
   summary?: {
     actions_count?: number;
     exportable_count?: number;
@@ -255,7 +255,7 @@ export interface ExportPriceMonitoringPriceUpdateBody {
 
 export interface ExportPriceMonitoringPriceUpdateResult {
   status?: string | null;
-  output_path?: string | null;
+  output_path?: ArtifactPayload | string | null;
   rows_exported?: number;
   columns?: string[];
   [key: string]: unknown;
@@ -354,6 +354,10 @@ export interface BridgeArtifact {
   modified_at?: string | null;
   download_url?: string | null;
   read_url?: string | null;
+  is_allowed?: boolean | null;
+  can_read?: boolean | null;
+  can_download?: boolean | null;
+  warning?: string | null;
   [key: string]: unknown;
 }
 
@@ -372,9 +376,12 @@ export interface ArtifactRoot {
   path: string;
   exists?: boolean | null;
   name?: string | null;
+  source?: string | null;
+  is_default?: boolean | null;
+  is_configured?: boolean | null;
 }
 
-export interface ArtifactItem {
+export interface ArtifactPayload {
   name: string;
   path: string;
   extension?: string | null;
@@ -382,8 +389,14 @@ export interface ArtifactItem {
   modified_at?: string | null;
   download_url?: string | null;
   read_url?: string | null;
+  is_allowed: boolean;
+  can_read: boolean;
+  can_download: boolean;
+  warning?: string | null;
   [key: string]: unknown;
 }
+
+export type ArtifactItem = ArtifactPayload;
 
 export interface ArtifactListResponse {
   items: ArtifactItem[];
@@ -398,4 +411,19 @@ export interface ArtifactReadResponse {
   size_bytes?: number | null;
   encoding?: string | null;
   [key: string]: unknown;
+}
+
+export interface PathRootsEnv {
+  PRICEFETCHER_ARTIFACT_ROOTS?: string | null;
+  PRICEFETCHER_FILE_ROOTS?: string | null;
+  [key: string]: string | null | undefined;
+}
+
+export interface PathRootsResponse {
+  artifact_roots: ArtifactRoot[];
+  file_roots: ArtifactRoot[];
+  output_roots: ArtifactRoot[];
+  env: PathRootsEnv;
+  path_separator?: string | null;
+  platform?: string | null;
 }

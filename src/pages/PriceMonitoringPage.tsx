@@ -2,16 +2,20 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   CommerceApiError,
   commerceClient,
+  getArtifactPath,
   getCommerceApiErrorMessage,
 } from "../api/commerceClient";
 import type {
   ApplyPriceMonitoringReviewActionsResult,
   ArtifactItem,
+  ArtifactPayload,
+  ArtifactRoot,
   CatalogBrandOption,
   CatalogCategoryHierarchyResponse,
   ExportPriceMonitoringPriceUpdateResult,
   FetchPriceMonitoringResult,
   MarketplaceFilter,
+  PathRootsResponse,
   PriceMonitoringAction,
   PriceMonitoringReviewAction,
   PriceMonitoringReviewItem,
@@ -42,6 +46,10 @@ interface RowActionState {
 }
 
 function formatValue(value: unknown): string {
+  if (isRecord(value) && typeof value.path === "string") {
+    return value.path;
+  }
+
   if (value === null || value === undefined || value === "") {
     return "-";
   }
@@ -401,20 +409,41 @@ function RunSummaryBlock({
   );
 }
 
-function FetchResultBlock({ result }: { result: FetchPriceMonitoringResult }) {
+function FetchResultBlock({
+  result,
+  onPreview,
+}: {
+  result: FetchPriceMonitoringResult;
+  onPreview: (path: string) => Promise<string>;
+}) {
+  const artifacts = artifactValuesToItems([
+    result.input_csv_path,
+    result.enriched_csv_path,
+    result.fetch_summary_path,
+    result.fetch_result_path,
+  ]);
+
   return (
     <div className="state-block">
       <strong>Fetch result</strong>
       <dl className="summary-grid">
         <SummaryItem label="Status" value={result.status} />
         <SummaryItem label="Source" value={result.source} />
-        <SummaryItem label="Input CSV" value={result.input_csv_path} />
-        <SummaryItem label="Enriched CSV" value={result.enriched_csv_path} />
-        <SummaryItem label="Fetch summary" value={result.fetch_summary_path} />
-        <SummaryItem label="Fetch result" value={result.fetch_result_path} />
+        <SummaryItem label="Input CSV" value={getArtifactPath(result.input_csv_path)} />
+        <SummaryItem label="Enriched CSV" value={getArtifactPath(result.enriched_csv_path)} />
+        <SummaryItem label="Fetch summary" value={getArtifactPath(result.fetch_summary_path)} />
+        <SummaryItem label="Fetch result" value={getArtifactPath(result.fetch_result_path)} />
         <SummaryItem label="Started" value={result.started_at} />
         <SummaryItem label="Completed" value={result.completed_at} />
       </dl>
+      {artifacts.length > 0 ? (
+        <ArtifactList
+          title="Fetch artifacts"
+          items={artifacts}
+          onPreview={onPreview}
+          getDownloadUrl={commerceClient.getArtifactDownloadUrl}
+        />
+      ) : null}
       {result.warnings && result.warnings.length > 0 ? (
         <div className="compact-list">
           <strong>Warnings</strong>
@@ -429,33 +458,90 @@ function FetchResultBlock({ result }: { result: FetchPriceMonitoringResult }) {
   );
 }
 
-function ApplyActionsResultBlock({ result }: { result: ApplyPriceMonitoringReviewActionsResult }) {
+function ReviewArtifactsBlock({
+  review,
+  onPreview,
+}: {
+  review: PriceMonitoringReviewResponse;
+  onPreview: (path: string) => Promise<string>;
+}) {
+  const artifacts = artifactValuesToItems([
+    review.review_csv_path,
+    review.enriched_csv_path,
+  ]);
+
+  return artifacts.length > 0 ? (
+    <ArtifactList
+      title="Review artifacts"
+      items={artifacts}
+      onPreview={onPreview}
+      getDownloadUrl={commerceClient.getArtifactDownloadUrl}
+    />
+  ) : null;
+}
+
+function ApplyActionsResultBlock({
+  result,
+  onPreview,
+}: {
+  result: ApplyPriceMonitoringReviewActionsResult;
+  onPreview: (path: string) => Promise<string>;
+}) {
+  const artifacts = artifactValuesToItems([
+    result.review_csv_path,
+    result.review_actions_path,
+  ]);
+
   return (
     <div className="state-block">
       <strong>Actions applied</strong>
       <dl className="summary-grid">
         <SummaryItem label="Status" value={result.status} />
-        <SummaryItem label="Review CSV" value={result.review_csv_path} />
-        <SummaryItem label="Actions path" value={result.review_actions_path} />
+        <SummaryItem label="Review CSV" value={getArtifactPath(result.review_csv_path)} />
+        <SummaryItem label="Actions path" value={getArtifactPath(result.review_actions_path)} />
         <SummaryItem label="Actions" value={result.summary?.actions_count} />
         <SummaryItem label="Exportable" value={result.summary?.exportable_count} />
         <SummaryItem label="Ignored" value={result.summary?.ignored_count} />
         <SummaryItem label="Not exportable" value={result.summary?.not_exportable_count} />
       </dl>
+      {artifacts.length > 0 ? (
+        <ArtifactList
+          title="Review action artifacts"
+          items={artifacts}
+          onPreview={onPreview}
+          getDownloadUrl={commerceClient.getArtifactDownloadUrl}
+        />
+      ) : null}
     </div>
   );
 }
 
-function ExportResultBlock({ result }: { result: ExportPriceMonitoringPriceUpdateResult }) {
+function ExportResultBlock({
+  result,
+  onPreview,
+}: {
+  result: ExportPriceMonitoringPriceUpdateResult;
+  onPreview: (path: string) => Promise<string>;
+}) {
+  const artifacts = artifactValuesToItems([result.output_path]);
+
   return (
     <div className="state-block">
       <strong>Export result</strong>
       <dl className="summary-grid">
         <SummaryItem label="Status" value={result.status} />
-        <SummaryItem label="Output path" value={result.output_path} />
+        <SummaryItem label="Output path" value={getArtifactPath(result.output_path)} />
         <SummaryItem label="Rows exported" value={result.rows_exported} />
         <SummaryItem label="Columns" value={result.columns?.join(", ")} />
       </dl>
+      {artifacts.length > 0 ? (
+        <ArtifactList
+          title="Export artifact"
+          items={artifacts}
+          onPreview={onPreview}
+          getDownloadUrl={commerceClient.getArtifactDownloadUrl}
+        />
+      ) : null}
       <p className="muted">This exports CSV only. OpenCart is not updated automatically.</p>
     </div>
   );
@@ -470,6 +556,64 @@ function SummaryItem({ label, value }: { label: string; value: unknown }) {
   );
 }
 
+function getNameFromPath(path: string): string {
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : path;
+}
+
+function artifactValueToItem(
+  value: ArtifactPayload | string | null | undefined,
+): ArtifactItem | null {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const path = value.trim();
+  if (!path) {
+    return null;
+  }
+
+  return {
+    name: getNameFromPath(path),
+    path,
+    extension: null,
+    size_bytes: null,
+    modified_at: null,
+    download_url: null,
+    read_url: null,
+    is_allowed: true,
+    can_read: true,
+    can_download: true,
+    warning: null,
+  };
+}
+
+function artifactValuesToItems(
+  values: Array<ArtifactPayload | string | null | undefined>,
+): ArtifactItem[] {
+  return values
+    .map(artifactValueToItem)
+    .filter((item): item is ArtifactItem => item !== null);
+}
+
+function normalizeWindowsPath(path: string): string {
+  return path.trim().replace(/\//g, "\\").replace(/\\+$/g, "").toLowerCase();
+}
+
+function isPathUnderRoot(path: string, root: string): boolean {
+  const normalizedPath = normalizeWindowsPath(path);
+  const normalizedRoot = normalizeWindowsPath(root);
+
+  return (
+    normalizedPath === normalizedRoot ||
+    normalizedPath.startsWith(`${normalizedRoot}\\`)
+  );
+}
+
 function PriceMonitoringSetupHint() {
   return (
     <div className="setup-hint compact">
@@ -480,6 +624,86 @@ function PriceMonitoringSetupHint() {
         <li>Confirm fetch created an enriched CSV before loading review.</li>
       </ul>
     </div>
+  );
+}
+
+function RootList({ title, roots }: { title: string; roots: ArtifactRoot[] }) {
+  return (
+    <div className="diagnostic-card">
+      <strong>{title}</strong>
+      {roots.length === 0 ? (
+        <p className="muted">No roots reported.</p>
+      ) : (
+        <ul className="root-list">
+          {roots.map((root, index) => (
+            <li key={`${root.path}-${index}`}>
+              <code>{root.path}</code>
+              <span className={`status-badge ${root.exists ? "ok" : "neutral"}`}>
+                {root.exists ? "Exists" : "Missing"}
+              </span>
+              {root.is_default ? <span className="status-badge active">Default</span> : null}
+              {root.is_configured ? (
+                <span className="status-badge ok">Configured</span>
+              ) : null}
+              {root.source ? <small className="muted">{root.source}</small> : null}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function BackendPathsPanel({
+  roots,
+  isLoading,
+  error,
+  onRefresh,
+}: {
+  roots: PathRootsResponse | null;
+  isLoading: boolean;
+  error: string | null;
+  onRefresh: () => void;
+}) {
+  return (
+    <section className="panel">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Diagnostics</p>
+          <h3>Backend Paths</h3>
+        </div>
+        <button className="button secondary" type="button" onClick={onRefresh}>
+          Refresh paths
+        </button>
+      </div>
+
+      {isLoading ? <LoadingState label="Loading backend path roots..." /> : null}
+      {error ? <ErrorState message={error} /> : null}
+      {roots ? (
+        <>
+          <div className="diagnostics-list">
+            <RootList title="Artifact roots" roots={roots.artifact_roots} />
+            <RootList title="File/editor roots" roots={roots.file_roots} />
+            <RootList title="Output roots" roots={roots.output_roots} />
+          </div>
+          <div className="diagnostic-card">
+            <strong>Environment</strong>
+            <dl className="summary-grid diagnostics-summary-grid">
+              <SummaryItem
+                label="PRICEFETCHER_ARTIFACT_ROOTS"
+                value={roots.env.PRICEFETCHER_ARTIFACT_ROOTS ?? "not_reported"}
+              />
+              <SummaryItem
+                label="PRICEFETCHER_FILE_ROOTS"
+                value={roots.env.PRICEFETCHER_FILE_ROOTS ?? "not_reported"}
+              />
+              <SummaryItem label="Platform" value={roots.platform} />
+              <SummaryItem label="Separator" value={roots.path_separator} />
+            </dl>
+          </div>
+        </>
+      ) : null}
+    </section>
   );
 }
 
@@ -544,11 +768,17 @@ export function PriceMonitoringPage() {
   const [isApplyLoading, setIsApplyLoading] = useState(false);
 
   const [reviewCsvPath, setReviewCsvPath] = useState("");
+  const [useCustomExportPath, setUseCustomExportPath] = useState(false);
+  const [selectedExportArtifactRoot, setSelectedExportArtifactRoot] = useState("");
   const [exportOutputPath, setExportOutputPath] = useState("");
   const [exportResult, setExportResult] =
     useState<ExportPriceMonitoringPriceUpdateResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
   const [isExportLoading, setIsExportLoading] = useState(false);
+
+  const [pathRoots, setPathRoots] = useState<PathRootsResponse | null>(null);
+  const [pathRootsError, setPathRootsError] = useState<string | null>(null);
+  const [isPathRootsLoading, setIsPathRootsLoading] = useState(false);
 
   const loadFilters = useCallback(async (signal?: AbortSignal) => {
     setAreFiltersLoading(true);
@@ -612,12 +842,37 @@ export function PriceMonitoringPage() {
     }
   }, []);
 
+  const loadPathRoots = useCallback(async (signal?: AbortSignal) => {
+    setIsPathRootsLoading(true);
+    setPathRootsError(null);
+    try {
+      const roots = await commerceClient.getPathRoots(signal);
+      if (signal?.aborted) {
+        return;
+      }
+
+      setPathRoots(roots);
+    } catch {
+      if (!signal?.aborted) {
+        setPathRoots(null);
+        setPathRootsError(
+          "Could not load backend path roots. Check that price-fetcher is running.",
+        );
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setIsPathRootsLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
     const controller = new AbortController();
     void loadFilters(controller.signal);
     void loadRuns(controller.signal);
+    void loadPathRoots(controller.signal);
     return () => controller.abort();
-  }, [loadFilters, loadRuns]);
+  }, [loadFilters, loadPathRoots, loadRuns]);
 
   const buildSelectionBody = (dryRun: boolean) =>
     makeSelectionBody({
@@ -770,8 +1025,9 @@ export function PriceMonitoringPage() {
         catalog_url: catalogUrl.trim() || null,
       });
       setFetchResult(result);
-      if (result.enriched_csv_path) {
-        setEnrichedCsvPath(result.enriched_csv_path);
+      const nextEnrichedCsvPath = getArtifactPath(result.enriched_csv_path);
+      if (nextEnrichedCsvPath) {
+        setEnrichedCsvPath(nextEnrichedCsvPath);
       }
       await refreshRunArtifacts(runId);
     } catch (error) {
@@ -796,11 +1052,13 @@ export function PriceMonitoringPage() {
         enriched_csv_path: enrichedCsvPath.trim() || null,
       });
       setReview(nextReview);
-      if (nextReview.review_csv_path) {
-        setReviewCsvPath(nextReview.review_csv_path);
+      const nextReviewCsvPath = getArtifactPath(nextReview.review_csv_path);
+      if (nextReviewCsvPath) {
+        setReviewCsvPath(nextReviewCsvPath);
       }
-      if (nextReview.enriched_csv_path) {
-        setEnrichedCsvPath(nextReview.enriched_csv_path);
+      const nextEnrichedCsvPath = getArtifactPath(nextReview.enriched_csv_path);
+      if (nextEnrichedCsvPath) {
+        setEnrichedCsvPath(nextEnrichedCsvPath);
       }
       setRowActions(
         nextReview.items.reduce<Record<string, RowActionState>>((nextActions, item) => {
@@ -910,6 +1168,41 @@ export function PriceMonitoringPage() {
     [actionRows, rowActions],
   );
 
+  const configuredArtifactRoots = useMemo(
+    () => (pathRoots?.artifact_roots ?? []).filter((root) => root.is_configured),
+    [pathRoots?.artifact_roots],
+  );
+
+  const customExportPathWarning = useMemo(() => {
+    if (!useCustomExportPath) {
+      return null;
+    }
+
+    const outputPath = exportOutputPath.trim();
+    if (!outputPath) {
+      return "Enter a custom export path or turn off custom export path.";
+    }
+
+    if (configuredArtifactRoots.length === 0) {
+      return "No configured artifact roots were reported. Set PRICEFETCHER_ARTIFACT_ROOTS before using custom export paths.";
+    }
+
+    if (!selectedExportArtifactRoot) {
+      return "Choose a configured artifact root before using a custom export path.";
+    }
+
+    if (!isPathUnderRoot(outputPath, selectedExportArtifactRoot)) {
+      return "Custom export path does not appear to be inside the selected PRICEFETCHER_ARTIFACT_ROOTS directory.";
+    }
+
+    return null;
+  }, [
+    configuredArtifactRoots.length,
+    exportOutputPath,
+    selectedExportArtifactRoot,
+    useCustomExportPath,
+  ]);
+
   const applyActions = async () => {
     const runId = currentRunId.trim();
     if (!runId) {
@@ -936,8 +1229,9 @@ export function PriceMonitoringPage() {
         actions: actionPayload,
       });
       setApplyResult(result);
-      if (result.review_csv_path) {
-        setReviewCsvPath(result.review_csv_path);
+      const nextReviewCsvPath = getArtifactPath(result.review_csv_path);
+      if (nextReviewCsvPath) {
+        setReviewCsvPath(nextReviewCsvPath);
       }
       await refreshRunArtifacts(runId);
     } catch (error) {
@@ -954,13 +1248,18 @@ export function PriceMonitoringPage() {
       return;
     }
 
+    if (useCustomExportPath && customExportPathWarning) {
+      setExportError(customExportPathWarning);
+      return;
+    }
+
     setIsExportLoading(true);
     setExportError(null);
     setExportResult(null);
     try {
       const result = await commerceClient.exportPriceMonitoringPriceUpdate(runId, {
         review_csv_path: reviewCsvPath.trim() || null,
-        output_path: exportOutputPath.trim() || null,
+        output_path: useCustomExportPath ? exportOutputPath.trim() || null : null,
       });
       setExportResult(result);
       await refreshRunArtifacts(runId);
@@ -978,6 +1277,13 @@ export function PriceMonitoringPage() {
         <h2>Competitor price workflow</h2>
         <p>Preview a catalog selection, fetch competitor prices, review actions, and export CSV only.</p>
       </section>
+
+      <BackendPathsPanel
+        roots={pathRoots}
+        isLoading={isPathRootsLoading}
+        error={pathRootsError}
+        onRefresh={() => void loadPathRoots()}
+      />
 
       <section className="panel">
         <div className="section-heading">
@@ -1307,7 +1613,7 @@ export function PriceMonitoringPage() {
             <PriceMonitoringSetupHint />
           </>
         ) : null}
-        {fetchResult ? <FetchResultBlock result={fetchResult} /> : null}
+        {fetchResult ? <FetchResultBlock result={fetchResult} onPreview={previewArtifact} /> : null}
       </section>
 
       <section className="panel">
@@ -1359,6 +1665,7 @@ export function PriceMonitoringPage() {
                 <SummaryItem key={key} label={key} value={value} />
               ))}
             </dl>
+            <ReviewArtifactsBlock review={review} onPreview={previewArtifact} />
 
             {review.items.length === 0 ? (
               <EmptyState title="No review rows" message="The backend returned an empty review." />
@@ -1488,7 +1795,9 @@ export function PriceMonitoringPage() {
             <PriceMonitoringSetupHint />
           </>
         ) : null}
-        {applyResult ? <ApplyActionsResultBlock result={applyResult} /> : null}
+        {applyResult ? (
+          <ApplyActionsResultBlock result={applyResult} onPreview={previewArtifact} />
+        ) : null}
       </section>
 
       <section className="panel">
@@ -1510,15 +1819,70 @@ export function PriceMonitoringPage() {
               placeholder="Leave empty for backend default"
             />
           </label>
-          <label>
-            Output path
+          <label className="checkbox-row">
             <input
-              value={exportOutputPath}
-              onChange={(event) => setExportOutputPath(event.target.value)}
-              placeholder="Leave empty for backend default"
+              type="checkbox"
+              checked={useCustomExportPath}
+              onChange={(event) => setUseCustomExportPath(event.target.checked)}
             />
+            Use custom export path
           </label>
         </div>
+        {useCustomExportPath ? (
+          <div className="state-block">
+            <strong>Custom export path</strong>
+            <p className="muted">
+              Custom export paths must be inside PRICEFETCHER_ARTIFACT_ROOTS.
+            </p>
+            <div className="filter-grid">
+              <label>
+                Configured artifact root
+                <select
+                  value={selectedExportArtifactRoot}
+                  onChange={(event) => setSelectedExportArtifactRoot(event.target.value)}
+                >
+                  <option value="">Choose configured root</option>
+                  {configuredArtifactRoots.map((root) => (
+                    <option key={root.path} value={root.path}>
+                      {root.path}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Output path
+                <input
+                  value={exportOutputPath}
+                  onChange={(event) => setExportOutputPath(event.target.value)}
+                  placeholder="D:\\PriceFetcher\\output\\custom\\opencart_price_update.csv"
+                />
+              </label>
+            </div>
+            {configuredArtifactRoots.length > 0 ? (
+              <div className="compact-list">
+                <strong>Configured artifact roots</strong>
+                <ul>
+                  {configuredArtifactRoots.map((root) => (
+                    <li key={root.path}>
+                      <code>{root.path}</code>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ) : (
+              <p className="form-error">
+                No configured artifact roots were reported by the backend.
+              </p>
+            )}
+            {customExportPathWarning ? (
+              <p className="form-error">{customExportPathWarning}</p>
+            ) : null}
+          </div>
+        ) : (
+          <p className="muted">
+            Output path is omitted so the backend writes to the run folder.
+          </p>
+        )}
         <button
           className="button primary inline-button"
           type="button"
@@ -1533,7 +1897,7 @@ export function PriceMonitoringPage() {
             <PriceMonitoringSetupHint />
           </>
         ) : null}
-        {exportResult ? <ExportResultBlock result={exportResult} /> : null}
+        {exportResult ? <ExportResultBlock result={exportResult} onPreview={previewArtifact} /> : null}
       </section>
     </div>
   );

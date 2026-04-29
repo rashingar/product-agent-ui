@@ -3,6 +3,7 @@ import type {
   ApplyPriceMonitoringReviewActionsResult,
   ArtifactItem,
   ArtifactListResponse,
+  ArtifactPayload,
   ArtifactReadResponse,
   ArtifactRoot,
   BridgeRunBody,
@@ -25,6 +26,8 @@ import type {
   FileListResponse,
   FileListItem,
   FileRoot,
+  PathRootsEnv,
+  PathRootsResponse,
   PriceMonitoringReviewItem,
   PriceMonitoringReviewParams,
   PriceMonitoringReviewResponse,
@@ -167,6 +170,9 @@ function appendQuery(path: string, params?: QueryParams): string {
 
 export function toCommerceArtifactUrl(urlOrPath: string): string {
   const value = urlOrPath.trim();
+  if (value.length === 0) {
+    return "";
+  }
 
   if (value.startsWith("/commerce-api/")) {
     return value;
@@ -177,6 +183,14 @@ export function toCommerceArtifactUrl(urlOrPath: string): string {
   }
 
   return `/commerce-api/artifacts/download?path=${encodeURIComponent(value)}`;
+}
+
+export function getArtifactPath(value: ArtifactPayload | string | null | undefined): string {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  return value?.path ?? "";
 }
 
 function normalizeStringList(payload: unknown): string[] {
@@ -281,6 +295,9 @@ function normalizeArtifactRoot(value: unknown): ArtifactRoot | null {
     path: String(path),
     exists: typeof value.exists === "boolean" ? value.exists : null,
     name: typeof value.name === "string" ? value.name : null,
+    source: typeof value.source === "string" ? value.source : null,
+    is_default: typeof value.is_default === "boolean" ? value.is_default : null,
+    is_configured: typeof value.is_configured === "boolean" ? value.is_configured : null,
   };
 }
 
@@ -290,12 +307,54 @@ function normalizeArtifactRoots(payload: unknown): ArtifactRoot[] {
     .filter((root): root is ArtifactRoot => root !== null);
 }
 
+function normalizePathRootsEnv(value: unknown): PathRootsEnv {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<PathRootsEnv>((env, [key, envValue]) => {
+    env[key] =
+      typeof envValue === "string" || envValue === null || envValue === undefined
+        ? envValue
+        : String(envValue);
+    return env;
+  }, {});
+}
+
+function normalizePathRoots(payload: unknown): PathRootsResponse {
+  if (!isRecord(payload)) {
+    return {
+      artifact_roots: [],
+      file_roots: [],
+      output_roots: [],
+      env: {},
+      path_separator: null,
+      platform: null,
+    };
+  }
+
+  return {
+    artifact_roots: getArrayPayload(payload.artifact_roots, ["roots", "items", "data", "results"])
+      .map(normalizeArtifactRoot)
+      .filter((root): root is ArtifactRoot => root !== null),
+    file_roots: getArrayPayload(payload.file_roots, ["roots", "items", "data", "results"])
+      .map(normalizeArtifactRoot)
+      .filter((root): root is ArtifactRoot => root !== null),
+    output_roots: getArrayPayload(payload.output_roots, ["roots", "items", "data", "results"])
+      .map(normalizeArtifactRoot)
+      .filter((root): root is ArtifactRoot => root !== null),
+    env: normalizePathRootsEnv(payload.env),
+    path_separator: typeof payload.path_separator === "string" ? payload.path_separator : null,
+    platform: typeof payload.platform === "string" ? payload.platform : null,
+  };
+}
+
 function getNameFromPath(path: string): string {
   const parts = path.split(/[\\/]+/).filter(Boolean);
   return parts.length > 0 ? parts[parts.length - 1] : path;
 }
 
-function normalizeArtifactItem(value: unknown): ArtifactItem | null {
+export function normalizeCommerceArtifact(value: unknown): ArtifactItem | null {
   if (!isRecord(value)) {
     return null;
   }
@@ -315,9 +374,31 @@ function normalizeArtifactItem(value: unknown): ArtifactItem | null {
     extension: typeof value.extension === "string" ? value.extension : null,
     size_bytes: typeof value.size_bytes === "number" ? value.size_bytes : null,
     modified_at: typeof value.modified_at === "string" ? value.modified_at : null,
-    download_url: typeof value.download_url === "string" ? toCommerceArtifactUrl(value.download_url) : null,
-    read_url: typeof value.read_url === "string" ? toCommerceArtifactUrl(value.read_url) : null,
+    download_url:
+      typeof value.download_url === "string" && value.download_url.trim().length > 0
+        ? toCommerceArtifactUrl(value.download_url)
+        : null,
+    read_url:
+      typeof value.read_url === "string" && value.read_url.trim().length > 0
+        ? toCommerceArtifactUrl(value.read_url)
+        : null,
+    is_allowed: value.is_allowed === false ? false : true,
+    can_read: value.can_read === false ? false : true,
+    can_download: value.can_download === false ? false : true,
+    warning: typeof value.warning === "string" && value.warning.trim().length > 0 ? value.warning : null,
   };
+}
+
+function normalizeArtifactPathValue(value: unknown): ArtifactPayload | string | null {
+  if (typeof value === "string") {
+    return value;
+  }
+
+  if (typeof value === "number") {
+    return String(value);
+  }
+
+  return normalizeCommerceArtifact(value);
 }
 
 function normalizeArtifactList(payload: unknown): ArtifactListResponse {
@@ -329,7 +410,7 @@ function normalizeArtifactList(payload: unknown): ArtifactListResponse {
         ? source.run_id
         : null,
     items: getArrayPayload(payload, ["items", "artifacts", "data", "results"])
-      .map(normalizeArtifactItem)
+      .map(normalizeCommerceArtifact)
       .filter((item): item is ArtifactItem => item !== null),
   };
 }
@@ -492,8 +573,8 @@ function normalizeReview(payload: unknown): PriceMonitoringReviewResponse {
       .map(normalizeReviewItem)
       .filter((item): item is PriceMonitoringReviewItem => item !== null),
     summary: isRecord(payload.summary) ? (payload.summary as Record<string, number>) : {},
-    review_csv_path: typeof payload.review_csv_path === "string" ? payload.review_csv_path : null,
-    enriched_csv_path: typeof payload.enriched_csv_path === "string" ? payload.enriched_csv_path : null,
+    review_csv_path: normalizeArtifactPathValue(payload.review_csv_path),
+    enriched_csv_path: normalizeArtifactPathValue(payload.enriched_csv_path),
   };
 }
 
@@ -504,8 +585,49 @@ function normalizeFetchResult(payload: unknown): FetchPriceMonitoringResult {
 
   return {
     ...payload,
+    input_csv_path: normalizeArtifactPathValue(payload.input_csv_path),
+    enriched_csv_path: normalizeArtifactPathValue(payload.enriched_csv_path),
+    fetch_summary_path: normalizeArtifactPathValue(payload.fetch_summary_path),
+    fetch_result_path: normalizeArtifactPathValue(payload.fetch_result_path),
     warnings: normalizeStringArray(payload.warnings),
   };
+}
+
+function normalizeApplyReviewActionsResult(payload: unknown): ApplyPriceMonitoringReviewActionsResult {
+  if (!isRecord(payload)) {
+    return {};
+  }
+
+  return {
+    ...payload,
+    review_csv_path: normalizeArtifactPathValue(payload.review_csv_path),
+    review_actions_path: normalizeArtifactPathValue(payload.review_actions_path),
+    summary: isRecord(payload.summary) ? payload.summary : undefined,
+  } as ApplyPriceMonitoringReviewActionsResult;
+}
+
+function normalizeExportPriceUpdateResult(payload: unknown): ExportPriceMonitoringPriceUpdateResult {
+  if (!isRecord(payload)) {
+    return {};
+  }
+
+  return {
+    ...payload,
+    output_path: normalizeArtifactPathValue(payload.output_path),
+    columns: normalizeStringArray(payload.columns),
+  };
+}
+
+function isArtifactPathForbidden(path: string, status: number): boolean {
+  if (status !== 403) {
+    return false;
+  }
+
+  return (
+    path.startsWith("/artifacts/") ||
+    path.includes("/review") ||
+    path.includes("/export-price-update")
+  );
 }
 
 async function request<T>(path: string, options: CommerceRequestOptions = {}): Promise<T> {
@@ -531,11 +653,14 @@ async function request<T>(path: string, options: CommerceRequestOptions = {}): P
 
   if (!response.ok) {
     const backendMessage = getPayloadMessage(payload) ?? response.statusText;
+    const pathHint = isArtifactPathForbidden(path, response.status)
+      ? " Path is outside configured artifact roots. Add the directory to PRICEFETCHER_ARTIFACT_ROOTS and restart the backend."
+      : "";
     const setupHint =
       response.status === 404 && path.startsWith("/catalog/")
         ? " If the API is running, check that sourceCata.csv exists at C:\\Users\\user\\Downloads\\sourceCata.csv or set PRICEFETCHER_SOURCE_CATA_PATH."
         : "";
-    const message = `Commerce API ${response.status} at ${path}: ${backendMessage}${setupHint}`;
+    const message = `Commerce API ${response.status} at ${path}: ${backendMessage}${pathHint}${setupHint}`;
     throw new CommerceApiError(message, response.status, payload, path);
   }
 
@@ -708,6 +833,10 @@ export const commerceClient = {
     return normalizeArtifactRoots(await request<unknown>("/artifacts/roots", { signal }));
   },
 
+  async getPathRoots(signal?: AbortSignal): Promise<PathRootsResponse> {
+    return normalizePathRoots(await request<unknown>("/paths/roots", { signal }));
+  },
+
   async listBridgeRunArtifacts(
     runId: string,
     signal?: AbortSignal,
@@ -831,14 +960,14 @@ export const commerceClient = {
     body: ApplyPriceMonitoringReviewActionsBody,
     signal?: AbortSignal,
   ): Promise<ApplyPriceMonitoringReviewActionsResult> {
-    return request<ApplyPriceMonitoringReviewActionsResult>(
+    return request<unknown>(
       `/price-monitoring/runs/${encodeURIComponent(runId)}/review/actions`,
       {
         method: "POST",
         body,
         signal,
       },
-    );
+    ).then(normalizeApplyReviewActionsResult);
   },
 
   exportPriceMonitoringPriceUpdate(
@@ -846,14 +975,14 @@ export const commerceClient = {
     body: ExportPriceMonitoringPriceUpdateBody,
     signal?: AbortSignal,
   ): Promise<ExportPriceMonitoringPriceUpdateResult> {
-    return request<ExportPriceMonitoringPriceUpdateResult>(
+    return request<unknown>(
       `/price-monitoring/runs/${encodeURIComponent(runId)}/export-price-update`,
       {
         method: "POST",
         body,
         signal,
       },
-    );
+    ).then(normalizeExportPriceUpdateResult);
   },
 
   async getFileRoots(signal?: AbortSignal): Promise<FileRoot[]> {
