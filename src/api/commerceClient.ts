@@ -1,6 +1,10 @@
 import type {
   ApplyPriceMonitoringReviewActionsBody,
   ApplyPriceMonitoringReviewActionsResult,
+  ArtifactItem,
+  ArtifactListResponse,
+  ArtifactReadResponse,
+  ArtifactRoot,
   BridgeRunBody,
   BridgeRunResponse,
   CatalogBrandOption,
@@ -161,6 +165,20 @@ function appendQuery(path: string, params?: QueryParams): string {
   return query ? `${path}?${query}` : path;
 }
 
+export function toCommerceArtifactUrl(urlOrPath: string): string {
+  const value = urlOrPath.trim();
+
+  if (value.startsWith("/commerce-api/")) {
+    return value;
+  }
+
+  if (value.startsWith("/api/artifacts/")) {
+    return value.replace(/^\/api\/artifacts\//, "/commerce-api/artifacts/");
+  }
+
+  return `/commerce-api/artifacts/download?path=${encodeURIComponent(value)}`;
+}
+
 function normalizeStringList(payload: unknown): string[] {
   const list = Array.isArray(payload)
     ? payload
@@ -247,6 +265,103 @@ function normalizeFileRoots(payload: unknown): FileRoot[] {
   return getArrayPayload(payload, ["roots", "items", "data", "results"])
     .map(normalizeFileRoot)
     .filter((root): root is FileRoot => root !== null);
+}
+
+function normalizeArtifactRoot(value: unknown): ArtifactRoot | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const path = value.path ?? value.root;
+  if (typeof path !== "string" && typeof path !== "number") {
+    return null;
+  }
+
+  return {
+    path: String(path),
+    exists: typeof value.exists === "boolean" ? value.exists : null,
+    name: typeof value.name === "string" ? value.name : null,
+  };
+}
+
+function normalizeArtifactRoots(payload: unknown): ArtifactRoot[] {
+  return getArrayPayload(payload, ["roots", "items", "data", "results"])
+    .map(normalizeArtifactRoot)
+    .filter((root): root is ArtifactRoot => root !== null);
+}
+
+function getNameFromPath(path: string): string {
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : path;
+}
+
+function normalizeArtifactItem(value: unknown): ArtifactItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const path = value.path;
+  if (typeof path !== "string" && typeof path !== "number") {
+    return null;
+  }
+
+  const normalizedPath = String(path);
+  const name = value.name;
+
+  return {
+    ...value,
+    name: typeof name === "string" && name.trim().length > 0 ? name : getNameFromPath(normalizedPath),
+    path: normalizedPath,
+    extension: typeof value.extension === "string" ? value.extension : null,
+    size_bytes: typeof value.size_bytes === "number" ? value.size_bytes : null,
+    modified_at: typeof value.modified_at === "string" ? value.modified_at : null,
+    download_url: typeof value.download_url === "string" ? toCommerceArtifactUrl(value.download_url) : null,
+    read_url: typeof value.read_url === "string" ? toCommerceArtifactUrl(value.read_url) : null,
+  };
+}
+
+function normalizeArtifactList(payload: unknown): ArtifactListResponse {
+  const source = isRecord(payload) ? payload : {};
+  return {
+    root: typeof source.root === "string" ? source.root : null,
+    run_id:
+      typeof source.run_id === "string" || typeof source.run_id === "number"
+        ? source.run_id
+        : null,
+    items: getArrayPayload(payload, ["items", "artifacts", "data", "results"])
+      .map(normalizeArtifactItem)
+      .filter((item): item is ArtifactItem => item !== null),
+  };
+}
+
+function normalizeArtifactRead(payload: unknown): ArtifactReadResponse {
+  if (typeof payload === "string") {
+    return {
+      path: "",
+      content: payload,
+    };
+  }
+
+  if (!isRecord(payload)) {
+    return {
+      path: "",
+      content: "",
+    };
+  }
+
+  return {
+    ...payload,
+    path: typeof payload.path === "string" ? payload.path : "",
+    content:
+      typeof payload.content === "string"
+        ? payload.content
+        : typeof payload.text === "string"
+          ? payload.text
+          : "",
+    truncated: typeof payload.truncated === "boolean" ? payload.truncated : null,
+    size_bytes: typeof payload.size_bytes === "number" ? payload.size_bytes : null,
+    encoding: typeof payload.encoding === "string" ? payload.encoding : null,
+  };
 }
 
 function normalizeFileList(payload: unknown): FileListResponse {
@@ -405,7 +520,7 @@ async function request<T>(path: string, options: CommerceRequestOptions = {}): P
   } catch (error) {
     const rawMessage = error instanceof Error ? error.message : String(error);
     throw new CommerceApiError(
-      `Commerce API unreachable at ${path}. Is pricefetcher-api running on 127.0.0.1:8001?`,
+      `Commerce API unreachable at ${path}. Start pricefetcher-api on 127.0.0.1:8001.`,
       0,
       rawMessage,
       path,
@@ -545,6 +660,10 @@ function normalizeCatalogBrandOptions(payload: unknown): CatalogBrandOption[] {
 export const commerceClient = {
   commerceApiBaseUrl,
 
+  getCommerceHealth(signal?: AbortSignal): Promise<unknown> {
+    return request<unknown>("/health", { signal });
+  },
+
   async listCatalogProducts(
     params: CatalogProductsParams = {},
     signal?: AbortSignal,
@@ -583,6 +702,52 @@ export const commerceClient = {
   async getCatalogSummary(signal?: AbortSignal): Promise<CatalogSummary> {
     const summary = await request<unknown>("/catalog/summary", { signal });
     return isRecord(summary) ? summary : {};
+  },
+
+  async getArtifactRoots(signal?: AbortSignal): Promise<ArtifactRoot[]> {
+    return normalizeArtifactRoots(await request<unknown>("/artifacts/roots", { signal }));
+  },
+
+  async listBridgeRunArtifacts(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<ArtifactListResponse> {
+    return normalizeArtifactList(
+      await request<unknown>(`/artifacts/bridge/runs/${encodeURIComponent(runId)}`, {
+        signal,
+      }),
+    );
+  },
+
+  async listPriceMonitoringRunArtifacts(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<ArtifactListResponse> {
+    return normalizeArtifactList(
+      await request<unknown>(`/artifacts/price-monitoring/runs/${encodeURIComponent(runId)}`, {
+        signal,
+      }),
+    );
+  },
+
+  async readArtifact(
+    path: string,
+    maxBytes?: number,
+    signal?: AbortSignal,
+  ): Promise<ArtifactReadResponse> {
+    return normalizeArtifactRead(
+      await request<unknown>(
+        appendQuery("/artifacts/read", {
+          path,
+          max_bytes: maxBytes,
+        }),
+        { signal },
+      ),
+    );
+  },
+
+  getArtifactDownloadUrl(path: string): string {
+    return toCommerceArtifactUrl(path);
   },
 
   previewPriceMonitoringSelection(

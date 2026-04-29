@@ -133,25 +133,50 @@ export function checkProductAgentApi(): Promise<DiagnosticResult> {
 }
 
 export async function checkCommerceApi(): Promise<DiagnosticResult[]> {
+  const healthUrl = joinUrl(commerceClient.commerceApiBaseUrl, "/health");
   const summaryUrl = joinUrl(commerceClient.commerceApiBaseUrl, "/catalog/summary");
   const rootsUrl = joinUrl(commerceClient.commerceApiBaseUrl, "/files/roots");
+  const artifactRootsUrl = joinUrl(commerceClient.commerceApiBaseUrl, "/artifacts/roots");
 
-  return Promise.all([
+  const [healthResult, summaryResult, fileRootsResult, artifactRootsResult] = await Promise.all([
     checkEndpoint({
-      service: "Commerce API catalog",
+      service: "Commerce API health",
+      requestUrl: healthUrl,
+      okMessage: "Commerce API health endpoint responded.",
+      errorSuggestion:
+        "Commerce API is not reachable. Start price-fetcher with pricefetcher-api or python -m pricefetcher.api.app.",
+    }),
+    checkEndpoint({
+      service: "Commerce API catalog summary",
       requestUrl: summaryUrl,
       okMessage: "Commerce catalog summary responded.",
       errorSuggestion:
-        "Start pricefetcher-api, reinstall with python -m pip install -e ., confirm sourceCata.csv exists at C:\\Users\\user\\Downloads\\sourceCata.csv or set PRICEFETCHER_SOURCE_CATA_PATH, and check VITE_COMMERCE_API_PROXY_TARGET=http://127.0.0.1:8001.",
+        "Confirm sourceCata.csv exists at C:\\Users\\user\\Downloads\\sourceCata.csv or set PRICEFETCHER_SOURCE_CATA_PATH.",
     }),
     checkEndpoint({
-      service: "Commerce API files",
+      service: "Commerce API file roots",
       requestUrl: rootsUrl,
       okMessage: "Commerce file roots responded.",
       errorSuggestion:
         "Start pricefetcher-api and check PRICEFETCHER_FILE_ROOTS if expected safe folders are missing.",
     }),
+    checkEndpoint({
+      service: "Commerce API artifact roots",
+      requestUrl: artifactRootsUrl,
+      okMessage: "Commerce artifact roots responded.",
+      errorSuggestion:
+        "Start the latest price-fetcher backend and check artifact root configuration.",
+    }),
   ]);
+
+  if (healthResult.status === "ok" && summaryResult.status !== "ok") {
+    summaryResult.message =
+      "Commerce API is running, but catalog loading failed. Check sourceCata.csv path or PRICEFETCHER_SOURCE_CATA_PATH.";
+    summaryResult.suggestedFix =
+      "Check sourceCata.csv path or PRICEFETCHER_SOURCE_CATA_PATH.";
+  }
+
+  return [healthResult, summaryResult, fileRootsResult, artifactRootsResult];
 }
 
 export async function runApiDiagnostics(): Promise<ApiDiagnostics> {

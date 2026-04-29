@@ -6,6 +6,7 @@ import {
 } from "../api/commerceClient";
 import type {
   ApplyPriceMonitoringReviewActionsResult,
+  ArtifactItem,
   CatalogBrandOption,
   CatalogCategoryHierarchyResponse,
   ExportPriceMonitoringPriceUpdateResult,
@@ -21,6 +22,7 @@ import type {
   PriceMonitoringSelectionResult,
   PriceMonitoringSource,
 } from "../api/commerceTypes";
+import { ArtifactList } from "../components/ArtifactList";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
 import {
   CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE,
@@ -520,6 +522,9 @@ export function PriceMonitoringPage() {
   const [isRunsLoading, setIsRunsLoading] = useState(false);
   const [loadRunError, setLoadRunError] = useState<string | null>(null);
   const [isLoadRunLoading, setIsLoadRunLoading] = useState(false);
+  const [runArtifacts, setRunArtifacts] = useState<ArtifactItem[]>([]);
+  const [artifactWarning, setArtifactWarning] = useState<string | null>(null);
+  const [isArtifactsLoading, setIsArtifactsLoading] = useState(false);
 
   const [fetchSource, setFetchSource] = useState<SourceOverride>("");
   const [catalogUrl, setCatalogUrl] = useState("");
@@ -632,6 +637,31 @@ export function PriceMonitoringPage() {
       dryRun,
     });
 
+  const refreshRunArtifacts = async (runId = currentRunId.trim()) => {
+    if (!runId) {
+      setRunArtifacts([]);
+      return;
+    }
+
+    setIsArtifactsLoading(true);
+    setArtifactWarning(null);
+    try {
+      const artifactList = await commerceClient.listPriceMonitoringRunArtifacts(runId);
+      setRunArtifacts(artifactList.items);
+    } catch (error) {
+      setArtifactWarning(
+        `Artifact listing failed: ${getCommerceApiErrorMessage(error)}`,
+      );
+    } finally {
+      setIsArtifactsLoading(false);
+    }
+  };
+
+  const previewArtifact = async (path: string) => {
+    const response = await commerceClient.readArtifact(path, 200_000);
+    return response.content;
+  };
+
   const selectedHierarchyFilters = useMemo<SelectionHierarchyFilters>(
     () => ({
       family: selectedFamily || null,
@@ -688,6 +718,7 @@ export function PriceMonitoringPage() {
       setCurrentRunFilters(hierarchyFilterSnapshot);
       if (runId) {
         setCurrentRunId(runId);
+        await refreshRunArtifacts(runId);
       }
     } catch (error) {
       setCreateError(getCommerceApiErrorMessage(error));
@@ -709,6 +740,7 @@ export function PriceMonitoringPage() {
       setCurrentRun(run);
       setCurrentRunFilters(null);
       setCurrentRunId(runId);
+      await refreshRunArtifacts(runId);
     } catch (error) {
       const message =
         error instanceof CommerceApiError && error.status === 404
@@ -716,6 +748,7 @@ export function PriceMonitoringPage() {
           : getCommerceApiErrorMessage(error);
       setCurrentRunId(runId);
       setLoadRunError(message);
+      await refreshRunArtifacts(runId);
     } finally {
       setIsLoadRunLoading(false);
     }
@@ -740,6 +773,7 @@ export function PriceMonitoringPage() {
       if (result.enriched_csv_path) {
         setEnrichedCsvPath(result.enriched_csv_path);
       }
+      await refreshRunArtifacts(runId);
     } catch (error) {
       setFetchError(getCommerceApiErrorMessage(error));
     } finally {
@@ -774,6 +808,7 @@ export function PriceMonitoringPage() {
           return nextActions;
         }, {}),
       );
+      await refreshRunArtifacts(runId);
     } catch (error) {
       setReviewError(getCommerceApiErrorMessage(error));
     } finally {
@@ -904,6 +939,7 @@ export function PriceMonitoringPage() {
       if (result.review_csv_path) {
         setReviewCsvPath(result.review_csv_path);
       }
+      await refreshRunArtifacts(runId);
     } catch (error) {
       setApplyError(getCommerceApiErrorMessage(error));
     } finally {
@@ -927,6 +963,7 @@ export function PriceMonitoringPage() {
         output_path: exportOutputPath.trim() || null,
       });
       setExportResult(result);
+      await refreshRunArtifacts(runId);
     } catch (error) {
       setExportError(getCommerceApiErrorMessage(error));
     } finally {
@@ -1203,6 +1240,29 @@ export function PriceMonitoringPage() {
         ) : null}
 
         {currentRun ? <RunSummaryBlock run={currentRun} filters={currentRunFilters} /> : null}
+        {currentRunId.trim() ? (
+          <div className="state-block">
+            <div className="section-heading">
+              <strong>Run artifacts</strong>
+              <button
+                className="button secondary"
+                type="button"
+                disabled={isArtifactsLoading}
+                onClick={() => void refreshRunArtifacts()}
+              >
+                {isArtifactsLoading ? "Refreshing..." : "Refresh artifacts"}
+              </button>
+            </div>
+            {artifactWarning ? <p className="muted">{artifactWarning}</p> : null}
+            {isArtifactsLoading ? <LoadingState label="Loading artifacts..." /> : null}
+            <ArtifactList
+              title="Price monitoring run artifacts"
+              items={runArtifacts}
+              onPreview={previewArtifact}
+              getDownloadUrl={commerceClient.getArtifactDownloadUrl}
+            />
+          </div>
+        ) : null}
       </section>
 
       <section className="panel">

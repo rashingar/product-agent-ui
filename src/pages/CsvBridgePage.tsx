@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { commerceClient, getCommerceApiErrorMessage } from "../api/commerceClient";
 import type {
+  ArtifactItem,
+  BridgeArtifact,
   BridgeRunResponse,
   CsvRow,
   FileListItem,
@@ -9,6 +11,7 @@ import type {
   ReadCsvFileResponse,
   SaveCsvResponse,
 } from "../api/commerceTypes";
+import { ArtifactList } from "../components/ArtifactList";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
 
 const DEFAULT_MAX_ROWS = 1000;
@@ -207,6 +210,29 @@ function BridgeResult({ result }: { result: BridgeRunResponse }) {
   );
 }
 
+function getNameFromPath(path: string): string {
+  const parts = path.split(/[\\/]+/).filter(Boolean);
+  return parts.length > 0 ? parts[parts.length - 1] : path;
+}
+
+function bridgeArtifactToItem(artifact: BridgeArtifact): ArtifactItem | null {
+  if (!artifact.path) {
+    return null;
+  }
+
+  const path = artifact.path;
+  return {
+    ...artifact,
+    name: artifact.name || getNameFromPath(path),
+    path,
+    extension: artifact.extension ?? null,
+    size_bytes: artifact.size_bytes ?? null,
+    modified_at: artifact.modified_at ?? null,
+    download_url: artifact.download_url ?? null,
+    read_url: artifact.read_url ?? null,
+  };
+}
+
 function CsvBridgeSetupHint() {
   return (
     <div className="setup-hint compact">
@@ -253,6 +279,8 @@ export function CsvBridgePage() {
   const [outputDir, setOutputDir] = useState("");
   const [bridgeResult, setBridgeResult] = useState<BridgeRunResponse | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [bridgeArtifactItems, setBridgeArtifactItems] = useState<ArtifactItem[]>([]);
+  const [bridgeArtifactWarning, setBridgeArtifactWarning] = useState<string | null>(null);
   const [isBridgeLoading, setIsBridgeLoading] = useState(false);
 
   const displayItems = useMemo(
@@ -430,6 +458,8 @@ export function CsvBridgePage() {
     setIsBridgeLoading(true);
     setBridgeError(null);
     setBridgeResult(null);
+    setBridgeArtifactItems([]);
+    setBridgeArtifactWarning(null);
     try {
       const result = await commerceClient.runBridge({
         opencart_export_path: opencartExportPath.trim(),
@@ -437,11 +467,32 @@ export function CsvBridgePage() {
         output_dir: outputDir.trim() || null,
       });
       setBridgeResult(result);
+      const responseArtifacts = (result.artifacts ?? [])
+        .map(bridgeArtifactToItem)
+        .filter((item): item is ArtifactItem => item !== null);
+      setBridgeArtifactItems(responseArtifacts);
+
+      const runId = result.run_id === null || result.run_id === undefined ? "" : String(result.run_id);
+      if (runId) {
+        try {
+          const artifactList = await commerceClient.listBridgeRunArtifacts(runId);
+          setBridgeArtifactItems(artifactList.items.length > 0 ? artifactList.items : responseArtifacts);
+        } catch (artifactError) {
+          setBridgeArtifactWarning(
+            `Bridge finished, but artifact listing failed: ${getCommerceApiErrorMessage(artifactError)}`,
+          );
+        }
+      }
     } catch (error) {
       setBridgeError(getCommerceApiErrorMessage(error));
     } finally {
       setIsBridgeLoading(false);
     }
+  };
+
+  const previewArtifact = async (path: string) => {
+    const response = await commerceClient.readArtifact(path, 200_000);
+    return response.content;
   };
 
   const canSaveCopy = Boolean(csv && copyTargetPath.trim().length > 0 && !isSaveCopyLoading);
@@ -769,6 +820,15 @@ export function CsvBridgePage() {
 
         {bridgeError ? <ErrorState message={bridgeError} /> : null}
         {bridgeResult ? <BridgeResult result={bridgeResult} /> : null}
+        {bridgeArtifactWarning ? <p className="state-block">{bridgeArtifactWarning}</p> : null}
+        {bridgeArtifactItems.length > 0 ? (
+          <ArtifactList
+            title="Bridge run artifacts"
+            items={bridgeArtifactItems}
+            onPreview={previewArtifact}
+            getDownloadUrl={commerceClient.getArtifactDownloadUrl}
+          />
+        ) : null}
       </section>
     </div>
   );

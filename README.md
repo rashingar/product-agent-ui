@@ -20,28 +20,41 @@ Job creation responses should include either `job_id` or `id`. The UI also accep
 
 The Catalog tab uses the commerce / price-fetcher API:
 
-- `GET /api/catalog/products`
-- `GET /api/catalog/category-hierarchy`
-- `GET /api/catalog/brands`
-- `GET /api/catalog/summary`
-- `POST /api/price-monitoring/selection/preview`
-- `POST /api/price-monitoring/runs`
-- `GET /api/price-monitoring/runs`
-- `GET /api/price-monitoring/runs/{run_id}`
-- `POST /api/price-monitoring/runs/{run_id}/fetch`
-- `GET /api/price-monitoring/runs/{run_id}/fetch`
-- `GET /api/price-monitoring/runs/{run_id}/review`
-- `POST /api/price-monitoring/runs/{run_id}/review/actions`
-- `POST /api/price-monitoring/runs/{run_id}/export-price-update`
+- `GET /commerce-api/health`
+- `GET /commerce-api/catalog/products`
+- `GET /commerce-api/catalog/category-hierarchy`
+- `GET /commerce-api/catalog/brands`
+- `GET /commerce-api/catalog/summary`
+- `POST /commerce-api/price-monitoring/selection/preview`
+- `POST /commerce-api/price-monitoring/runs`
+- `GET /commerce-api/price-monitoring/runs`
+- `GET /commerce-api/price-monitoring/runs/{run_id}`
+- `POST /commerce-api/price-monitoring/runs/{run_id}/fetch`
+- `GET /commerce-api/price-monitoring/runs/{run_id}/fetch`
+- `GET /commerce-api/price-monitoring/runs/{run_id}/review`
+- `POST /commerce-api/price-monitoring/runs/{run_id}/review/actions`
+- `POST /commerce-api/price-monitoring/runs/{run_id}/export-price-update`
 
 The CSV/Bridge tab also uses the commerce / price-fetcher API:
 
-- `GET /api/files/roots`
-- `GET /api/files/list`
-- `POST /api/files/read`
-- `POST /api/files/save`
-- `POST /api/files/save-copy`
-- `POST /api/bridge/run`
+- `GET /commerce-api/files/roots`
+- `GET /commerce-api/files/list`
+- `POST /commerce-api/files/read`
+- `POST /commerce-api/files/save`
+- `POST /commerce-api/files/save-copy`
+- `POST /commerce-api/bridge/run`
+
+Commerce artifacts are served through:
+
+- `GET /commerce-api/artifacts/roots`
+- `GET /commerce-api/artifacts/bridge/runs/{run_id}`
+- `GET /commerce-api/artifacts/price-monitoring/runs/{run_id}`
+- `GET /commerce-api/artifacts/read?path=...`
+- `GET /commerce-api/artifacts/download?path=...`
+
+The browser always uses the `/commerce-api` proxy for commerce calls. Vite rewrites those
+requests to `/api` on the commerce backend, so `GET /commerce-api/health` reaches
+`GET http://127.0.0.1:8001/api/health`.
 
 ## Windows 10 Setup
 
@@ -145,12 +158,16 @@ npm run preview
 - The Catalog tab can browse commerce catalog products and preview/create Price Monitoring
   selection runs.
 - Catalog and Price Monitoring use backend-native hierarchy filters from
-  `/api/catalog/category-hierarchy`: Family, Category, and Sub-Category. The UI label is
-  `Category`, while request payloads and query params use the backend field
+  `/commerce-api/catalog/category-hierarchy`: Family, Category, and Sub-Category. The UI
+  label is `Category`, while request payloads and query params use the backend field
   `category_name`.
+- Catalog and Price Monitoring submit hierarchy filters as `family`, `category_name`, and
+  `sub_category`.
 - Raw OpenCart category strings remain available as expandable row debug information in the
   Catalog table, but they are not the primary filtering mechanism.
-- Manufacturer filters load from `/api/catalog/brands` and submit the exact manufacturer
+- Raw category is debug-only in normal UI flows. Legacy Price Monitoring run summaries may
+  still show `Raw category: ...` when old run data only contains `filters.category`.
+- Manufacturer filters load from `/commerce-api/catalog/brands` and submit the exact manufacturer
   string selected in the dropdown.
 - If the category hierarchy endpoint fails or is unavailable, update and start the latest
   `price-fetcher` backend.
@@ -161,11 +178,15 @@ npm run preview
   being overwritten before the UI enables the action.
 - Bridge runs are executed by the commerce backend. When the stock CSV path is omitted, the
   backend default stock file is used.
+- Bridge and Price Monitoring run artifacts are listed through the artifact endpoints and
+  can be previewed as plain text for `.csv`, `.json`, `.txt`, and `.log` files or downloaded
+  through `/commerce-api/artifacts/download?path=...`.
+- If artifact links fail, confirm the latest `price-fetcher` backend is installed and running.
 - The Price Monitoring tab supports this workflow: preview/create a selection run, fetch
   competitor prices, load review rows, choose `match_price`, `undercut`, or `ignore` actions,
   apply those review actions, and export an OpenCart price update CSV.
 - BestPrice fetches can include an optional `catalog_url` hint, while the backend may also
   resolve products from MPN data.
 - Price Monitoring export is CSV only. The UI does not update OpenCart automatically.
-- No authentication, websocket transport, batch upload, artifact previewing, Redux, Zustand, or React Query is included.
+- No authentication, websocket transport, batch upload, Redux, Zustand, or React Query is included.
 - Job detail and jobs list polling runs every 2.5 seconds while queued/running-like statuses are present, then stops once the backend reports a terminal status.

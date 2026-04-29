@@ -349,6 +349,11 @@ export interface BridgeRunBody {
 export interface BridgeArtifact {
   name?: string | null;
   path?: string | null;
+  extension?: string | null;
+  size_bytes?: number | null;
+  modified_at?: string | null;
+  download_url?: string | null;
+  read_url?: string | null;
   [key: string]: unknown;
 }
 
@@ -360,5 +365,37 @@ export interface BridgeRunResponse {
   output_dir?: string | null;
   artifacts?: BridgeArtifact[];
   summary?: Record<string, number>;
+  [key: string]: unknown;
+}
+
+export interface ArtifactRoot {
+  path: string;
+  exists?: boolean | null;
+  name?: string | null;
+}
+
+export interface ArtifactItem {
+  name: string;
+  path: string;
+  extension?: string | null;
+  size_bytes?: number | null;
+  modified_at?: string | null;
+  download_url?: string | null;
+  read_url?: string | null;
+  [key: string]: unknown;
+}
+
+export interface ArtifactListResponse {
+  items: ArtifactItem[];
+  root?: string | null;
+  run_id?: string | number | null;
+}
+
+export interface ArtifactReadResponse {
+  path: string;
+  content: string;
+  truncated?: boolean | null;
+  size_bytes?: number | null;
+  encoding?: string | null;
   [key: string]: unknown;
 }
