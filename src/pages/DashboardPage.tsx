@@ -165,6 +165,8 @@ export function DashboardPage() {
                 <li>Confirm catalog file exists: <code>C:\Users\user\Downloads\sourceCata.csv</code></li>
                 <li>Optional catalog override: <code>PRICEFETCHER_SOURCE_CATA_PATH</code></li>
                 <li>Run UI through Vite: <code>npm run dev</code></li>
+                <li>Start local platform: <code>scripts\windows\start-all.cmd</code></li>
+                <li>Terminal diagnostics: <code>scripts\windows\diagnose.cmd</code></li>
                 <li>Confirm proxy target: <code>VITE_COMMERCE_API_PROXY_TARGET=http://127.0.0.1:8001</code></li>
               </ul>
             </div>

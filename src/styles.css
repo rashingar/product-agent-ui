@@ -345,6 +345,39 @@ textarea {
   height: 18px;
 }
 
+.column-controls {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfc;
+}
+
+.column-controls summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.column-controls-panel {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.column-controls-panel .checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  font-weight: 700;
+}
+
+.column-controls-panel input {
+  width: 18px;
+  height: 18px;
+}
+
 .button-row,
 .pagination-row {
   display: flex;
@@ -781,6 +814,13 @@ code {
   overflow-wrap: anywhere;
 }
 
+.compact-debug-cell {
+  max-width: 260px;
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .json-block {
   max-width: 100%;
   overflow: auto;
@@ -845,7 +885,8 @@ code {
 }
 
 .artifact-panel,
-.artifact-preview {
+.artifact-preview,
+.artifact-preview-content {
   display: grid;
   gap: 14px;
 }
@@ -855,6 +896,55 @@ code {
   margin-top: 4px;
   color: var(--muted);
   overflow-wrap: anywhere;
+}
+
+.artifact-preview-meta {
+  display: grid;
+  flex: 1 1 520px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.artifact-preview-meta div {
+  min-width: 0;
+}
+
+.artifact-preview-meta dt {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.artifact-preview-meta dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-weight: 700;
+}
+
+.csv-preview-table-wrap {
+  max-height: 520px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.csv-preview-table-wrap table {
+  min-width: 960px;
+}
+
+.csv-preview-table-wrap th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--surface);
+}
+
+.csv-preview-table-wrap th,
+.csv-preview-table-wrap td {
+  padding: 8px 10px;
+  font-size: 13px;
+  white-space: nowrap;
 }
 
 @media (max-width: 820px) {
@@ -870,6 +960,8 @@ code {
   .catalog-summary-grid,
   .csv-metadata-grid,
   .diagnostics-summary-grid,
+  .artifact-preview-meta,
+  .column-controls-panel,
   .filter-grid,
   .browser-layout,
   .save-grid,

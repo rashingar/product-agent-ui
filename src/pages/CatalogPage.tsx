@@ -27,6 +27,146 @@ import {
 } from "../utils/categoryHierarchy";
 
 const DEFAULT_PAGE_SIZE = 100;
+const CATALOG_COLUMNS_STORAGE_KEY = "productAgentUi.catalog.columns.v1";
+
+type CatalogColumnId =
+  | "select"
+  | "model"
+  | "name"
+  | "manufacturer"
+  | "family"
+  | "category_name"
+  | "sub_category"
+  | "mpn"
+  | "price"
+  | "quantity"
+  | "bestprice_status"
+  | "skroutz_status"
+  | "ignored"
+  | "warnings"
+  | "status"
+  | "automation_eligible"
+  | "is_atomic_model"
+  | "raw_category"
+  | "category_levels";
+
+interface CatalogColumnDefinition {
+  id: CatalogColumnId;
+  label: string;
+  required?: boolean;
+}
+
+interface CatalogLayoutPreferences {
+  visibleColumnIds: CatalogColumnId[];
+  pageSize: number;
+}
+
+const CATALOG_COLUMNS: CatalogColumnDefinition[] = [
+  { id: "select", label: "Select", required: true },
+  { id: "model", label: "Model", required: true },
+  { id: "name", label: "Name", required: true },
+  { id: "manufacturer", label: "Manufacturer" },
+  { id: "family", label: "Family" },
+  { id: "category_name", label: "Category" },
+  { id: "sub_category", label: "Sub-Category" },
+  { id: "mpn", label: "MPN" },
+  { id: "price", label: "Price" },
+  { id: "quantity", label: "Qty" },
+  { id: "bestprice_status", label: "BestPrice" },
+  { id: "skroutz_status", label: "Skroutz" },
+  { id: "ignored", label: "Ignored" },
+  { id: "warnings", label: "Warnings / eligibility" },
+  { id: "status", label: "Status" },
+  { id: "automation_eligible", label: "Automation eligible" },
+  { id: "is_atomic_model", label: "Atomic" },
+  { id: "raw_category", label: "Raw category" },
+  { id: "category_levels", label: "Category levels" },
+];
+
+const DEFAULT_VISIBLE_CATALOG_COLUMNS: CatalogColumnId[] = [
+  "select",
+  "model",
+  "name",
+  "manufacturer",
+  "family",
+  "category_name",
+  "sub_category",
+  "mpn",
+  "price",
+  "quantity",
+  "bestprice_status",
+  "skroutz_status",
+  "ignored",
+  "warnings",
+];
+
+const REQUIRED_CATALOG_COLUMNS = CATALOG_COLUMNS.filter((column) => column.required).map(
+  (column) => column.id,
+);
+const CATALOG_COLUMN_IDS = new Set(CATALOG_COLUMNS.map((column) => column.id));
+
+function normalizeVisibleColumnIds(value: unknown): CatalogColumnId[] | null {
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  const visibleColumnIds = value.filter(
+    (item): item is CatalogColumnId =>
+      typeof item === "string" && CATALOG_COLUMN_IDS.has(item as CatalogColumnId),
+  );
+
+  if (visibleColumnIds.length === 0) {
+    return null;
+  }
+
+  return Array.from(new Set([...REQUIRED_CATALOG_COLUMNS, ...visibleColumnIds]));
+}
+
+function readCatalogLayoutPreferences(): CatalogLayoutPreferences {
+  if (typeof window === "undefined") {
+    return {
+      visibleColumnIds: DEFAULT_VISIBLE_CATALOG_COLUMNS,
+      pageSize: DEFAULT_PAGE_SIZE,
+    };
+  }
+
+  try {
+    const rawPreferences = window.localStorage.getItem(CATALOG_COLUMNS_STORAGE_KEY);
+    if (!rawPreferences) {
+      throw new Error("No saved preferences");
+    }
+
+    const parsed = JSON.parse(rawPreferences) as unknown;
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      throw new Error("Invalid saved preferences");
+    }
+
+    const record = parsed as Record<string, unknown>;
+    const visibleColumnIds = normalizeVisibleColumnIds(record.visibleColumnIds);
+    const pageSize =
+      typeof record.pageSize === "number" && [50, 100, 200].includes(record.pageSize)
+        ? record.pageSize
+        : DEFAULT_PAGE_SIZE;
+
+    return {
+      visibleColumnIds: visibleColumnIds ?? DEFAULT_VISIBLE_CATALOG_COLUMNS,
+      pageSize,
+    };
+  } catch {
+    return {
+      visibleColumnIds: DEFAULT_VISIBLE_CATALOG_COLUMNS,
+      pageSize: DEFAULT_PAGE_SIZE,
+    };
+  }
+}
+
+function writeCatalogLayoutPreferences(preferences: CatalogLayoutPreferences): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
+  window.localStorage.setItem(CATALOG_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
+}
 
 function normalizeModel(model: string): string {
   return model.trim();
@@ -243,6 +383,7 @@ function CatalogSetupHint() {
 }
 
 export function CatalogPage() {
+  const initialLayoutPreferences = useMemo(() => readCatalogLayoutPreferences(), []);
   const [summary, setSummary] = useState<CatalogSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
@@ -273,7 +414,10 @@ export function CatalogPage() {
   const [showComposite, setShowComposite] = useState(false);
   const [includeIgnored, setIncludeIgnored] = useState(false);
   const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
+  const [pageSize, setPageSize] = useState(initialLayoutPreferences.pageSize);
+  const [visibleColumnIds, setVisibleColumnIds] = useState<Set<CatalogColumnId>>(
+    () => new Set(initialLayoutPreferences.visibleColumnIds),
+  );
   const [selectedModels, setSelectedModels] = useState<Set<string>>(() => new Set());
 
   const [previewResult, setPreviewResult] = useState<PriceMonitoringSelectionResult | null>(null);
@@ -283,6 +427,11 @@ export function CatalogPage() {
   const [runResult, setRunResult] = useState<PriceMonitoringSelectionResult | null>(null);
   const [runError, setRunError] = useState<string | null>(null);
   const [isRunLoading, setIsRunLoading] = useState(false);
+
+  const isColumnVisible = useCallback(
+    (columnId: CatalogColumnId) => visibleColumnIds.has(columnId),
+    [visibleColumnIds],
+  );
 
   const loadSummary = useCallback(async (signal?: AbortSignal) => {
     setIsSummaryLoading(true);
@@ -443,6 +592,15 @@ export function CatalogPage() {
   }, [loadProducts]);
 
   useEffect(() => {
+    writeCatalogLayoutPreferences({
+      visibleColumnIds: CATALOG_COLUMNS.map((column) => column.id).filter((columnId) =>
+        visibleColumnIds.has(columnId),
+      ),
+      pageSize,
+    });
+  }, [pageSize, visibleColumnIds]);
+
+  useEffect(() => {
     setPage(1);
     setSelectedModels(new Set());
     setPreviewResult(null);
@@ -503,6 +661,29 @@ export function CatalogPage() {
 
       return next;
     });
+  };
+
+  const toggleColumn = (columnId: CatalogColumnId) => {
+    if (REQUIRED_CATALOG_COLUMNS.includes(columnId)) {
+      return;
+    }
+
+    setVisibleColumnIds((currentColumns) => {
+      const nextColumns = new Set(currentColumns);
+      if (nextColumns.has(columnId)) {
+        nextColumns.delete(columnId);
+      } else {
+        nextColumns.add(columnId);
+      }
+
+      REQUIRED_CATALOG_COLUMNS.forEach((requiredColumn) => nextColumns.add(requiredColumn));
+      return nextColumns;
+    });
+  };
+
+  const resetColumns = () => {
+    setVisibleColumnIds(new Set(DEFAULT_VISIBLE_CATALOG_COLUMNS));
+    setPageSize(DEFAULT_PAGE_SIZE);
   };
 
   const buildSelectionBody = (dryRun: boolean) =>
@@ -763,6 +944,27 @@ export function CatalogPage() {
           category data is available in each product row for debugging.
         </p>
 
+        <details className="column-controls">
+          <summary>Columns</summary>
+          <div className="column-controls-panel">
+            {CATALOG_COLUMNS.map((column) => (
+              <label className="checkbox-row" key={column.id}>
+                <input
+                  type="checkbox"
+                  checked={visibleColumnIds.has(column.id)}
+                  disabled={column.required}
+                  onChange={() => toggleColumn(column.id)}
+                />
+                {column.label}
+                {column.required ? <span className="muted">required</span> : null}
+              </label>
+            ))}
+            <button className="button secondary inline-button" type="button" onClick={resetColumns}>
+              Reset columns
+            </button>
+          </div>
+        </details>
+
         <div className="toolbar">
           <p className="muted">
             {productsResponse.filtered_total.toLocaleString()} matching products.
@@ -821,28 +1023,35 @@ export function CatalogPage() {
               <table>
                 <thead>
                   <tr>
-                    <th>
-                      <input
-                        type="checkbox"
-                        aria-label="Select all visible eligible products"
-                        checked={allVisibleSelected}
-                        disabled={eligibleVisibleModels.length === 0}
-                        onChange={toggleAllVisible}
-                      />
-                    </th>
-                    <th>Model</th>
-                    <th>Name</th>
-                    <th>Family</th>
-                    <th>Category</th>
-                    <th>Sub-Category</th>
-                    <th>Manufacturer</th>
-                    <th>MPN</th>
-                    <th>Price</th>
-                    <th>Quantity</th>
-                    <th>BestPrice</th>
-                    <th>Skroutz</th>
-                    <th>Ignored</th>
-                    <th>Warnings / eligibility</th>
+                    {isColumnVisible("select") ? (
+                      <th>
+                        <input
+                          type="checkbox"
+                          aria-label="Select all visible eligible products"
+                          checked={allVisibleSelected}
+                          disabled={eligibleVisibleModels.length === 0}
+                          onChange={toggleAllVisible}
+                        />
+                      </th>
+                    ) : null}
+                    {isColumnVisible("model") ? <th>Model</th> : null}
+                    {isColumnVisible("name") ? <th>Name</th> : null}
+                    {isColumnVisible("manufacturer") ? <th>Manufacturer</th> : null}
+                    {isColumnVisible("family") ? <th>Family</th> : null}
+                    {isColumnVisible("category_name") ? <th>Category</th> : null}
+                    {isColumnVisible("sub_category") ? <th>Sub-Category</th> : null}
+                    {isColumnVisible("mpn") ? <th>MPN</th> : null}
+                    {isColumnVisible("price") ? <th>Price</th> : null}
+                    {isColumnVisible("quantity") ? <th>Qty</th> : null}
+                    {isColumnVisible("bestprice_status") ? <th>BestPrice</th> : null}
+                    {isColumnVisible("skroutz_status") ? <th>Skroutz</th> : null}
+                    {isColumnVisible("ignored") ? <th>Ignored</th> : null}
+                    {isColumnVisible("status") ? <th>Status</th> : null}
+                    {isColumnVisible("automation_eligible") ? <th>Automation</th> : null}
+                    {isColumnVisible("is_atomic_model") ? <th>Atomic</th> : null}
+                    {isColumnVisible("category_levels") ? <th>Category levels</th> : null}
+                    {isColumnVisible("raw_category") ? <th>Raw category</th> : null}
+                    {isColumnVisible("warnings") ? <th>Warnings / eligibility</th> : null}
                   </tr>
                 </thead>
                 <tbody>
@@ -852,54 +1061,93 @@ export function CatalogPage() {
                     const isSelected = selectedModels.has(model);
                     const warnings = Array.isArray(product.warnings) ? product.warnings : [];
                     const rawCategory = product.raw_category ?? product.category ?? "";
+                    const categoryLevels = Array.isArray(product.category_levels)
+                      ? product.category_levels.join(" > ")
+                      : "";
 
                     return (
                       <tr key={model}>
-                        <td>
-                          <input
-                            type="checkbox"
-                            aria-label={`Select ${model}`}
-                            checked={isSelected}
-                            disabled={selectionBlocker !== null}
-                            onChange={() => toggleModel(model)}
-                          />
-                        </td>
-                        <td className="nowrap-cell">{model}</td>
-                        <td>{formatValue(product.name)}</td>
-                        <td>{formatValue(product.family)}</td>
-                        <td>{formatValue(product.category_name)}</td>
-                        <td>{formatValue(product.sub_category)}</td>
-                        <td>{formatValue(product.manufacturer)}</td>
-                        <td>{formatValue(product.mpn)}</td>
-                        <td className="nowrap-cell">{formatMoney(product.price)}</td>
-                        <td>{formatValue(product.quantity)}</td>
-                        <td>
-                          <span className="status-badge neutral">
-                            {getMarketplaceStatus(product.bestprice_status)}
-                          </span>
-                        </td>
-                        <td>
-                          <span className="status-badge neutral">
-                            {getMarketplaceStatus(product.skroutz_status)}
-                          </span>
-                        </td>
-                        <td>{product.ignored ? "yes" : "no"}</td>
-                        <td>
-                          <div className="eligibility-cell">
-                            {selectionBlocker ? (
-                              <span className="status-badge queued">{selectionBlocker}</span>
-                            ) : (
-                              <span className="status-badge success">Eligible</span>
-                            )}
-                            {warnings.length > 0 ? (
-                              <span className="muted">{warnings.join(", ")}</span>
-                            ) : null}
+                        {isColumnVisible("select") ? (
+                          <td>
+                            <input
+                              type="checkbox"
+                              aria-label={`Select ${model}`}
+                              checked={isSelected}
+                              disabled={selectionBlocker !== null}
+                              onChange={() => toggleModel(model)}
+                            />
+                          </td>
+                        ) : null}
+                        {isColumnVisible("model") ? <td className="nowrap-cell">{model}</td> : null}
+                        {isColumnVisible("name") ? <td>{formatValue(product.name)}</td> : null}
+                        {isColumnVisible("manufacturer") ? <td>{formatValue(product.manufacturer)}</td> : null}
+                        {isColumnVisible("family") ? <td>{formatValue(product.family)}</td> : null}
+                        {isColumnVisible("category_name") ? <td>{formatValue(product.category_name)}</td> : null}
+                        {isColumnVisible("sub_category") ? <td>{formatValue(product.sub_category)}</td> : null}
+                        {isColumnVisible("mpn") ? <td>{formatValue(product.mpn)}</td> : null}
+                        {isColumnVisible("price") ? (
+                          <td className="nowrap-cell">{formatMoney(product.price)}</td>
+                        ) : null}
+                        {isColumnVisible("quantity") ? <td>{formatValue(product.quantity)}</td> : null}
+                        {isColumnVisible("bestprice_status") ? (
+                          <td>
+                            <span className="status-badge neutral">
+                              {getMarketplaceStatus(product.bestprice_status)}
+                            </span>
+                          </td>
+                        ) : null}
+                        {isColumnVisible("skroutz_status") ? (
+                          <td>
+                            <span className="status-badge neutral">
+                              {getMarketplaceStatus(product.skroutz_status)}
+                            </span>
+                          </td>
+                        ) : null}
+                        {isColumnVisible("ignored") ? <td>{product.ignored ? "yes" : "no"}</td> : null}
+                        {isColumnVisible("status") ? <td>{formatValue(product.status)}</td> : null}
+                        {isColumnVisible("automation_eligible") ? (
+                          <td>
+                            {typeof product.automation_eligible === "boolean"
+                              ? product.automation_eligible
+                                ? "yes"
+                                : "no"
+                              : "-"}
+                          </td>
+                        ) : null}
+                        {isColumnVisible("is_atomic_model") ? (
+                          <td>
+                            {typeof product.is_atomic_model === "boolean"
+                              ? product.is_atomic_model
+                                ? "yes"
+                                : "no"
+                              : "-"}
+                          </td>
+                        ) : null}
+                        {isColumnVisible("category_levels") ? (
+                          <td className="compact-debug-cell">{formatValue(categoryLevels)}</td>
+                        ) : null}
+                        {isColumnVisible("raw_category") ? (
+                          <td>
                             <details className="raw-category-detail">
                               <summary>Raw</summary>
                               <span>{formatValue(rawCategory)}</span>
                             </details>
-                          </div>
-                        </td>
+                          </td>
+                        ) : null}
+                        {isColumnVisible("warnings") ? (
+                          <td>
+                            <div className="eligibility-cell">
+                              {selectionBlocker ? (
+                                <span className="status-badge queued">{selectionBlocker}</span>
+                              ) : (
+                                <span className="status-badge success">Eligible</span>
+                              )}
+                              {warnings.length > 0 ? (
+                                <span className="muted">{warnings.join(", ")}</span>
+                              ) : null}
+                            </div>
+                          </td>
+                        ) : null}
                       </tr>
                     );
                   })}

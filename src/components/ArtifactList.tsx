@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { ArtifactItem } from "../api/commerceTypes";
 import { EmptyState } from "./layout/StateBlocks";
+import { parseCsvPreview } from "../utils/csvPreview";
 
 interface ArtifactListProps {
   title: string;
@@ -10,6 +11,13 @@ interface ArtifactListProps {
 }
 
 const TEXT_EXTENSIONS = new Set([".csv", ".json", ".txt", ".log"]);
+const CSV_VISIBLE_ROWS = 500;
+
+interface PreviewState {
+  item: ArtifactItem;
+  content: string | null;
+  viewAsText: boolean;
+}
 
 function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === "") {
@@ -51,18 +59,19 @@ export function ArtifactList({
   getDownloadUrl,
 }: ArtifactListProps) {
   const [previewTitle, setPreviewTitle] = useState<string | null>(null);
-  const [previewContent, setPreviewContent] = useState<string | null>(null);
+  const [previewState, setPreviewState] = useState<PreviewState | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [isPreviewLoading, setIsPreviewLoading] = useState(false);
 
   const preview = async (item: ArtifactItem) => {
     setIsPreviewLoading(true);
     setPreviewTitle(item.name);
-    setPreviewContent(null);
+    setPreviewState({ item, content: null, viewAsText: false });
     setPreviewError(null);
 
     try {
-      setPreviewContent(await onPreview(item.path));
+      const content = await onPreview(item.path);
+      setPreviewState({ item, content, viewAsText: false });
     } catch (error) {
       setPreviewError(error instanceof Error ? error.message : String(error));
     } finally {
@@ -145,7 +154,7 @@ export function ArtifactList({
               type="button"
               onClick={() => {
                 setPreviewTitle(null);
-                setPreviewContent(null);
+                setPreviewState(null);
                 setPreviewError(null);
               }}
             >
@@ -154,9 +163,143 @@ export function ArtifactList({
           </div>
           {isPreviewLoading ? <p className="muted">Loading preview...</p> : null}
           {previewError ? <p className="form-error">{previewError}</p> : null}
-          {previewContent !== null ? <pre className="json-block">{previewContent}</pre> : null}
+          {previewState?.content !== null && previewState?.content !== undefined ? (
+            <ArtifactPreviewContent
+              item={previewState.item}
+              content={previewState.content}
+              viewAsText={previewState.viewAsText}
+              onToggleText={() =>
+                setPreviewState((current) =>
+                  current ? { ...current, viewAsText: !current.viewAsText } : current,
+                )
+              }
+              downloadUrl={getDownloadUrl(previewState.item.download_url || previewState.item.path)}
+            />
+          ) : null}
         </div>
       ) : null}
+    </div>
+  );
+}
+
+function ArtifactPreviewContent({
+  item,
+  content,
+  viewAsText,
+  onToggleText,
+  downloadUrl,
+}: {
+  item: ArtifactItem;
+  content: string;
+  viewAsText: boolean;
+  onToggleText: () => void;
+  downloadUrl: string;
+}) {
+  const extension = getExtension(item);
+
+  if (extension === ".csv" && !viewAsText) {
+    const preview = parseCsvPreview(content);
+    const visibleRows = preview.rows.slice(0, CSV_VISIBLE_ROWS);
+    const isTruncated = preview.rowCount > visibleRows.length;
+
+    if (preview.columns.length > 0) {
+      return (
+        <div className="artifact-preview-content">
+          <div className="toolbar">
+            <dl className="artifact-preview-meta">
+              <div>
+                <dt>Path</dt>
+                <dd>{item.path}</dd>
+              </div>
+              <div>
+                <dt>Delimiter</dt>
+                <dd>{preview.delimiter === "\t" ? "tab" : preview.delimiter}</dd>
+              </div>
+              <div>
+                <dt>Rows</dt>
+                <dd>{preview.rowCount.toLocaleString()}</dd>
+              </div>
+              <div>
+                <dt>Visible</dt>
+                <dd>{visibleRows.length.toLocaleString()}</dd>
+              </div>
+            </dl>
+            <div className="button-row">
+              <button className="button secondary" type="button" onClick={onToggleText}>
+                View as text
+              </button>
+              <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
+                Download
+              </a>
+            </div>
+          </div>
+
+          {preview.parseWarning ? <p className="form-error">{preview.parseWarning}</p> : null}
+          {isTruncated ? (
+            <p className="muted">Showing first {CSV_VISIBLE_ROWS.toLocaleString()} rows.</p>
+          ) : null}
+
+          <div className="table-wrap csv-preview-table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  {preview.columns.map((column) => (
+                    <th key={column}>{column}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {visibleRows.map((row, rowIndex) => (
+                  <tr key={rowIndex}>
+                    {preview.columns.map((column) => (
+                      <td key={column}>{row[column]}</td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      );
+    }
+  }
+
+  if (extension === ".json" && !viewAsText) {
+    let formatted = content;
+    try {
+      formatted = JSON.stringify(JSON.parse(content) as unknown, null, 2);
+    } catch {
+      formatted = content;
+    }
+
+    return (
+      <div className="artifact-preview-content">
+        <div className="button-row">
+          <button className="button secondary" type="button" onClick={onToggleText}>
+            View raw text
+          </button>
+          <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
+            Download
+          </a>
+        </div>
+        <pre className="json-block">{formatted}</pre>
+      </div>
+    );
+  }
+
+  return (
+    <div className="artifact-preview-content">
+      <div className="button-row">
+        {extension === ".csv" || extension === ".json" ? (
+          <button className="button secondary" type="button" onClick={onToggleText}>
+            {viewAsText ? "View parsed" : "View as text"}
+          </button>
+        ) : null}
+        <a className="button secondary" href={downloadUrl} target="_blank" rel="noreferrer">
+          Download
+        </a>
+      </div>
+      <pre className="json-block">{content}</pre>
     </div>
   );
 }

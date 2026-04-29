@@ -87,6 +87,36 @@ npm run dev
 
 ## Local Startup Checklist
 
+Recommended Windows startup:
+
+1. Configure the Product-Agent API command if needed:
+
+```cmd
+set PRODUCT_AGENT_API_CMD=<your Product-Agent API start command>
+```
+
+2. Start all local platform windows:
+
+```cmd
+scripts\windows\start-all.cmd
+```
+
+3. Diagnose local services:
+
+```cmd
+scripts\windows\diagnose.cmd
+```
+
+Optional startup environment variables:
+
+- `PRICE_FETCHER_DIR`: local `price-fetcher` repository path. Defaults to sibling `..\price-fetcher`.
+- `PRODUCT_AGENT_DIR`: local Product-Agent repository path. Defaults to sibling `..\Product-Agent`.
+- `PRODUCT_AGENT_API_CMD`: command that starts the Product-Agent API on `127.0.0.1:8000`.
+- `VITE_API_PROXY_TARGET`: Product-Agent proxy target. Defaults to `http://127.0.0.1:8000`.
+- `VITE_COMMERCE_API_PROXY_TARGET`: commerce proxy target. Defaults to `http://127.0.0.1:8001`.
+
+Manual startup:
+
 1. Start the Product-Agent API:
 
 ```powershell
@@ -121,6 +151,7 @@ You can also run a terminal diagnostic check on Windows:
 
 ```powershell
 .\diagnose-windows.cmd
+scripts\windows\diagnose.cmd
 ```
 
 Local dev uses Vite proxies by default:
@@ -167,6 +198,8 @@ npm run preview
   Catalog table, but they are not the primary filtering mechanism.
 - Raw category is debug-only in normal UI flows. Legacy Price Monitoring run summaries may
   still show `Raw category: ...` when old run data only contains `filters.category`.
+- Catalog column visibility is stored in browser `localStorage` under
+  `productAgentUi.catalog.columns.v1`. Reset columns restores the default layout.
 - Manufacturer filters load from `/commerce-api/catalog/brands` and submit the exact manufacturer
   string selected in the dropdown.
 - If the category hierarchy endpoint fails or is unavailable, update and start the latest
@@ -179,8 +212,9 @@ npm run preview
 - Bridge runs are executed by the commerce backend. When the stock CSV path is omitted, the
   backend default stock file is used.
 - Bridge and Price Monitoring run artifacts are listed through the artifact endpoints and
-  can be previewed as plain text for `.csv`, `.json`, `.txt`, and `.log` files or downloaded
-  through `/commerce-api/artifacts/download?path=...`.
+  can be previewed or downloaded through `/commerce-api/artifacts/download?path=...`.
+- CSV artifacts preview as tables with string-preserved values. JSON artifacts preview as
+  formatted text when valid and raw text otherwise. TXT and LOG artifacts preview as plain text.
 - If artifact links fail, confirm the latest `price-fetcher` backend is installed and running.
 - The Price Monitoring tab supports this workflow: preview/create a selection run, fetch
   competitor prices, load review rows, choose `match_price`, `undercut`, or `ignore` actions,
