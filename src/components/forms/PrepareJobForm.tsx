@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { PrepareJobRequest } from "../../api/types";
 
 interface PrepareJobFormProps {
@@ -7,9 +7,11 @@ interface PrepareJobFormProps {
   isSubmitting: boolean;
   error: string | null;
   onSubmit: (request: PrepareJobRequest) => void;
+  initialForm?: PrepareFormState;
+  onFormChange?: (form: PrepareFormState) => void;
 }
 
-interface PrepareFormState {
+export interface PrepareFormState {
   model: string;
   url: string;
   photos: string;
@@ -19,7 +21,7 @@ interface PrepareFormState {
   price: string;
 }
 
-const initialFormState: PrepareFormState = {
+export const initialPrepareFormState: PrepareFormState = {
   model: "",
   url: "",
   photos: "",
@@ -45,9 +47,19 @@ export function PrepareJobForm({
   isSubmitting,
   error,
   onSubmit,
+  initialForm,
+  onFormChange,
 }: PrepareJobFormProps) {
-  const [form, setForm] = useState<PrepareFormState>(initialFormState);
+  const [form, setForm] = useState<PrepareFormState>(initialForm ?? initialPrepareFormState);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setForm(initialForm ?? initialPrepareFormState);
+  }, [initialForm]);
+
+  useEffect(() => {
+    onFormChange?.(form);
+  }, [form, onFormChange]);
 
   function updateField<Key extends keyof PrepareFormState>(
     key: Key,

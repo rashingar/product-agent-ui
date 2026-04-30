@@ -1,13 +1,22 @@
 import { Link } from "react-router-dom";
 import { canStopJob, getJobIdentifier, getJobStatus } from "../api/jobUtils";
-import { PrepareJobForm } from "../components/forms/PrepareJobForm";
+import {
+  initialPrepareFormState,
+  PrepareJobForm,
+  type PrepareFormState,
+} from "../components/forms/PrepareJobForm";
 import { StatusBadge } from "../components/jobs/StatusBadge";
 import { ErrorState } from "../components/layout/StateBlocks";
+import { usePersistentPageState } from "../hooks/usePersistentPageState";
 import { usePipelineRun } from "../hooks/usePipelineRun";
 
 export function PipelineJobPage() {
   const { currentRun, isRunning, startPipeline, stopJobError, stopStageJob, stoppingJobIds } =
     usePipelineRun();
+  const [form, setForm, resetForm] = usePersistentPageState<PrepareFormState>(
+    "product-agent-ui:pipeline:v1",
+    initialPrepareFormState,
+  );
 
   const handleStopStageJob = async (jobId: string) => {
     const confirmed = window.confirm(
@@ -26,6 +35,9 @@ export function PipelineJobPage() {
         <p className="eyebrow">Pipeline</p>
         <h2>Run full pipeline</h2>
         <p>Queues prepare, waits for success, then queues render and publish.</p>
+        <button className="text-button" type="button" onClick={resetForm}>
+          Reset saved Pipeline state
+        </button>
       </section>
 
       {currentRun ? (
@@ -80,6 +92,8 @@ export function PipelineJobPage() {
           busyLabel="Pipeline is running..."
           error={currentRun?.status === "failed" ? currentRun.error : null}
           isSubmitting={isRunning}
+          initialForm={form}
+          onFormChange={setForm}
           onSubmit={(request) => void startPipeline(request)}
         />
       </section>

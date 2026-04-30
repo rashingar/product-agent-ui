@@ -8,8 +8,12 @@ function getStatusTone(status: string): string {
     return "success";
   }
 
-  if (["failed", "failure", "error", "cancelled", "canceled", "stopped"].includes(normalized)) {
+  if (["failed", "failure", "error", "killed"].includes(normalized)) {
     return "danger";
+  }
+
+  if (["cancelled", "canceled", "stopped"].includes(normalized)) {
+    return "warning";
   }
 
   if (["queued", "pending"].includes(normalized)) {

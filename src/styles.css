@@ -254,6 +254,25 @@ textarea {
   background: var(--surface-alt);
 }
 
+.text-button {
+  display: inline-flex;
+  width: fit-content;
+  min-height: auto;
+  align-items: center;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--accent);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.text-button:hover {
+  color: var(--accent-strong);
+  text-decoration: underline;
+}
+
 .button.danger {
   border-color: #f2b8b5;
   background: var(--danger-bg);
@@ -704,6 +723,45 @@ textarea {
   cursor: pointer;
 }
 
+.diagnostic-artifacts {
+  display: grid;
+  gap: 12px;
+  border: 1px dashed #f0d27a;
+  border-radius: 8px;
+  padding: 14px;
+  background: #fffaf0;
+}
+
+.diagnostic-artifacts summary {
+  width: fit-content;
+  cursor: pointer;
+}
+
+.current-run-header {
+  display: grid;
+  grid-template-columns: minmax(180px, 1.2fr) repeat(4, minmax(120px, 1fr)) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: var(--surface);
+}
+
+.current-run-header > div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.current-run-header strong {
+  overflow-wrap: anywhere;
+}
+
+.selected-row {
+  background: #f4faf9;
+}
+
 .fetch-log-block {
   max-height: 320px;
 }
@@ -1113,6 +1171,10 @@ code {
   .browser-layout,
   .save-grid,
   .split-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .current-run-header {
     grid-template-columns: 1fr;
   }
 

@@ -34,12 +34,19 @@ import type {
   PriceMonitoringSource,
   RunPriceObservationsResponse,
 } from "../api/commerceTypes";
+import {
+  initialPriceMonitoringWorkflowState,
+  PRICE_MONITORING_STATE_KEY,
+  shouldTreatArtifactsAsDiagnostic,
+  type PriceMonitoringWorkflowState,
+} from "../api/priceMonitoringUtils";
 import { ArtifactList } from "../components/ArtifactList";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
 import {
   isPriceMonitoringDbAvailable,
   PriceMonitoringDbStatusBanner,
 } from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
+import { usePersistentPageState } from "../hooks/usePersistentPageState";
 import {
   CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE,
   formatHierarchyOptionLabel,
@@ -65,7 +72,7 @@ function normalizeFetchStatus(status: unknown): string {
     return "failed";
   }
 
-  return status;
+  return status.trim().toLowerCase();
 }
 
 function isActiveFetchStatus(status: unknown): boolean {
@@ -78,7 +85,8 @@ function isSuccessfulFetchStatus(status: unknown): boolean {
 }
 
 function isFailedFetchStatus(status: unknown): boolean {
-  return normalizeFetchStatus(status) === "failed";
+  const normalized = normalizeFetchStatus(status);
+  return normalized === "failed" || normalized === "killed";
 }
 
 function isCancelledFetchStatus(status: unknown): boolean {
@@ -103,7 +111,7 @@ function getFetchStatusTone(status: unknown): string {
     return "ok";
   }
 
-  if (normalized === "failed") {
+  if (normalized === "failed" || normalized === "killed") {
     return "danger";
   }
 
@@ -502,6 +510,7 @@ function RunSummaryBlock({
         <SummaryItem label="Latest fetch started" value={latestFetch?.started_at} />
         <SummaryItem label="Latest fetch completed" value={latestFetch?.completed_at} />
         <SummaryItem label="Latest fetch cancelled" value={latestFetch?.cancelled_at} />
+        <SummaryItem label="Latest fetch killed" value={latestFetch?.killed_at} />
       </dl>
       {latestFetch?.status ? (
         <p>
@@ -584,6 +593,7 @@ function FetchResultBlock({
     result.log_path,
   ]);
   const artifacts = result.artifacts && result.artifacts.length > 0 ? result.artifacts : fallbackArtifacts;
+  const artifactsAreDiagnostic = shouldTreatArtifactsAsDiagnostic(result);
 
   return (
     <div className="state-block">
@@ -605,7 +615,10 @@ function FetchResultBlock({
         <SummaryItem label="Started" value={result.started_at} />
         <SummaryItem label="Completed" value={result.completed_at} />
         <SummaryItem label="Cancelled" value={result.cancelled_at} />
+        <SummaryItem label="Killed" value={result.killed_at} />
         <SummaryItem label="Cancel reason" value={result.cancel_reason} />
+        <SummaryItem label="Termination mode" value={result.termination_mode} />
+        <SummaryItem label="Exit code" value={result.exit_code} />
         <SummaryItem label="Input CSV" value={getArtifactPath(result.input_csv_path)} />
         <SummaryItem label="Enriched CSV" value={getArtifactPath(result.enriched_csv_path)} />
         <SummaryItem label="Fetch summary" value={getArtifactPath(result.fetch_summary_path)} />
@@ -638,7 +651,17 @@ function FetchResultBlock({
       {result.was_refetch ? (
         <p className="muted">Refetch completed. Previous observations for this run were replaced.</p>
       ) : null}
-      {artifacts.length > 0 ? (
+      {artifacts.length > 0 && artifactsAreDiagnostic ? (
+        <DiagnosticArtifactsBlock
+          warning={result.artifact_warning}
+          artifacts={artifacts}
+          onPreview={onPreview}
+        />
+      ) : null}
+      {artifacts.length > 0 && !artifactsAreDiagnostic && isCancelledFetchStatus(result.status) ? (
+        <CompactArtifactLinks title="Cancelled execution artifacts" artifacts={artifacts} />
+      ) : null}
+      {artifacts.length > 0 && !artifactsAreDiagnostic && !isCancelledFetchStatus(result.status) ? (
         <ArtifactList
           title="Fetch artifacts"
           items={artifacts}
@@ -678,6 +701,57 @@ function FetchResultBlock({
       ) : null}
       {result.error ? <p className="form-error">{result.error}</p> : null}
     </div>
+  );
+}
+
+function CompactArtifactLinks({
+  title,
+  artifacts,
+}: {
+  title: string;
+  artifacts: ArtifactItem[];
+}) {
+  return (
+    <div className="compact-list">
+      <strong>{title}</strong>
+      <ul>
+        {artifacts.map((artifact, index) => (
+          <li key={`${artifact.path}-${index}`}>
+            <span>{artifact.name}</span>
+            <small className="artifact-path">{artifact.path}</small>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DiagnosticArtifactsBlock({
+  warning,
+  artifacts,
+  onPreview,
+}: {
+  warning?: string | null;
+  artifacts: ArtifactItem[];
+  onPreview: (path: string) => Promise<string>;
+}) {
+  return (
+    <details className="diagnostic-artifacts">
+      <summary>
+        <strong>Diagnostic artifacts</strong>
+        <span className="muted"> {artifacts.length.toLocaleString()} items</span>
+      </summary>
+      {warning ? <p className="form-warning">{warning}</p> : null}
+      <p className="muted">
+        These artifacts came from a diagnostic execution path and are not treated as successful outputs.
+      </p>
+      <ArtifactList
+        title="Diagnostic artifacts"
+        items={artifacts}
+        onPreview={onPreview}
+        getDownloadUrl={commerceClient.getArtifactDownloadUrl}
+      />
+    </details>
   );
 }
 
@@ -1341,25 +1415,34 @@ function BackendPathsPanel({
 export function PriceMonitoringPage() {
   const fetchPollIntervalRef = useRef<number | null>(null);
   const fetchPollControllerRef = useRef<AbortController | null>(null);
+  const restoredRunLoadedRef = useRef(false);
+  const [persistedState, setPersistedState, resetPersistedState] =
+    usePersistentPageState<PriceMonitoringWorkflowState>(
+      PRICE_MONITORING_STATE_KEY,
+      initialPriceMonitoringWorkflowState,
+      { debounceMs: 250 },
+    );
   const [categoryHierarchy, setCategoryHierarchy] =
     useState<CatalogCategoryHierarchyResponse | null>(null);
   const [brands, setBrands] = useState<CatalogBrandOption[]>([]);
   const [filterError, setFilterError] = useState<string | null>(null);
   const [areFiltersLoading, setAreFiltersLoading] = useState(true);
 
-  const [source, setSource] = useState<PriceMonitoringSource>("skroutz");
-  const [selectedFamily, setSelectedFamily] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedSubCategory, setSelectedSubCategory] = useState("");
-  const [manufacturer, setManufacturer] = useState("");
-  const [marketplace, setMarketplace] = useState<MarketplaceFilter>("all");
-  const [q, setQ] = useState("");
-  const [selectedModelText, setSelectedModelText] = useState("");
-  const [excludedModelText, setExcludedModelText] = useState("");
-  const [includeIgnored, setIncludeIgnored] = useState(false);
-  const [automationEligibleOnly, setAutomationEligibleOnly] = useState(true);
-  const [atomicOnly, setAtomicOnly] = useState(true);
-  const [hasMpn, setHasMpn] = useState(true);
+  const [source, setSource] = useState<PriceMonitoringSource>(persistedState.source);
+  const [selectedFamily, setSelectedFamily] = useState(persistedState.selectedFamily);
+  const [selectedCategory, setSelectedCategory] = useState(persistedState.selectedCategory);
+  const [selectedSubCategory, setSelectedSubCategory] = useState(persistedState.selectedSubCategory);
+  const [manufacturer, setManufacturer] = useState(persistedState.manufacturer);
+  const [marketplace, setMarketplace] = useState<MarketplaceFilter>(persistedState.marketplace);
+  const [q, setQ] = useState(persistedState.q);
+  const [selectedModelText, setSelectedModelText] = useState(persistedState.selectedModelText);
+  const [excludedModelText, setExcludedModelText] = useState(persistedState.excludedModelText);
+  const [includeIgnored, setIncludeIgnored] = useState(persistedState.includeIgnored);
+  const [automationEligibleOnly, setAutomationEligibleOnly] = useState(
+    persistedState.automationEligibleOnly,
+  );
+  const [atomicOnly, setAtomicOnly] = useState(persistedState.atomicOnly);
+  const [hasMpn, setHasMpn] = useState(persistedState.hasMpn);
 
   const [previewResult, setPreviewResult] = useState<PriceMonitoringSelectionResult | null>(null);
   const [previewFilters, setPreviewFilters] = useState<SelectionHierarchyFilters | null>(null);
@@ -1371,7 +1454,7 @@ export function PriceMonitoringPage() {
   const [createError, setCreateError] = useState<string | null>(null);
   const [isCreateLoading, setIsCreateLoading] = useState(false);
 
-  const [currentRunId, setCurrentRunId] = useState("");
+  const [currentRunId, setCurrentRunId] = useState(persistedState.currentRunId);
   const [currentRun, setCurrentRun] = useState<PriceMonitoringRun | PriceMonitoringSelectionResult | null>(null);
   const [currentRunFilters, setCurrentRunFilters] = useState<SelectionHierarchyFilters | null>(null);
   const [runs, setRuns] = useState<PriceMonitoringRun[]>([]);
@@ -1383,8 +1466,8 @@ export function PriceMonitoringPage() {
   const [artifactWarning, setArtifactWarning] = useState<string | null>(null);
   const [isArtifactsLoading, setIsArtifactsLoading] = useState(false);
 
-  const [fetchSource, setFetchSource] = useState<SourceOverride>("");
-  const [catalogUrl, setCatalogUrl] = useState("");
+  const [fetchSource, setFetchSource] = useState<SourceOverride>(persistedState.fetchSource);
+  const [catalogUrl, setCatalogUrl] = useState(persistedState.catalogUrl);
   const [fetchResult, setFetchResult] = useState<FetchPriceMonitoringResult | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isFetchLoading, setIsFetchLoading] = useState(false);
@@ -1393,21 +1476,36 @@ export function PriceMonitoringPage() {
   const [isFetchLogsLoading, setIsFetchLogsLoading] = useState(false);
   const [isCancelFetchLoading, setIsCancelFetchLoading] = useState(false);
 
-  const [enrichedCsvPath, setEnrichedCsvPath] = useState("");
+  const [enrichedCsvPath, setEnrichedCsvPath] = useState(persistedState.enrichedCsvPath);
   const [review, setReview] = useState<PriceMonitoringReviewResponse | null>(null);
   const [reviewError, setReviewError] = useState<string | null>(null);
   const [isReviewLoading, setIsReviewLoading] = useState(false);
-  const [rowActions, setRowActions] = useState<Record<string, RowActionState>>({});
+  const [rowActions, setRowActions] = useState<Record<string, RowActionState>>(() =>
+    persistedState.reviewActionDrafts.reduce<Record<string, RowActionState>>((drafts, draft) => {
+      if (draft.run_id === persistedState.currentRunId) {
+        drafts[draft.model] = {
+          selected_action: draft.selected_action,
+          undercut_amount: draft.undercut_amount,
+          reason: draft.reason,
+        };
+      }
+      return drafts;
+    }, {}),
+  );
 
   const [applyResult, setApplyResult] =
     useState<ApplyPriceMonitoringReviewActionsResult | null>(null);
   const [applyError, setApplyError] = useState<string | null>(null);
   const [isApplyLoading, setIsApplyLoading] = useState(false);
 
-  const [reviewCsvPath, setReviewCsvPath] = useState("");
-  const [useCustomExportPath, setUseCustomExportPath] = useState(false);
-  const [selectedExportArtifactRoot, setSelectedExportArtifactRoot] = useState("");
-  const [exportOutputPath, setExportOutputPath] = useState("");
+  const [reviewCsvPath, setReviewCsvPath] = useState(persistedState.reviewCsvPath);
+  const [useCustomExportPath, setUseCustomExportPath] = useState(
+    persistedState.useCustomExportPath,
+  );
+  const [selectedExportArtifactRoot, setSelectedExportArtifactRoot] = useState(
+    persistedState.selectedExportArtifactRoot,
+  );
+  const [exportOutputPath, setExportOutputPath] = useState(persistedState.exportOutputPath);
   const [exportResult, setExportResult] =
     useState<ExportPriceMonitoringPriceUpdateResult | null>(null);
   const [exportError, setExportError] = useState<string | null>(null);
@@ -1425,10 +1523,13 @@ export function PriceMonitoringPage() {
   const [storedObservationError, setStoredObservationError] = useState<string | null>(null);
   const [catalogSnapshotError, setCatalogSnapshotError] = useState<string | null>(null);
   const [isStoredObservationLoading, setIsStoredObservationLoading] = useState(false);
-  const [storedMatchStatus, setStoredMatchStatus] = useState<StoredObservationMatchFilter>("all");
-  const [includeUnmatchedObservations, setIncludeUnmatchedObservations] = useState(true);
-  const [storedModelFilter, setStoredModelFilter] = useState("");
-  const [storedMpnFilter, setStoredMpnFilter] = useState("");
+  const [storedMatchStatus, setStoredMatchStatus] =
+    useState<StoredObservationMatchFilter>(persistedState.storedMatchStatus);
+  const [includeUnmatchedObservations, setIncludeUnmatchedObservations] = useState(
+    persistedState.includeUnmatchedObservations,
+  );
+  const [storedModelFilter, setStoredModelFilter] = useState(persistedState.storedModelFilter);
+  const [storedMpnFilter, setStoredMpnFilter] = useState(persistedState.storedMpnFilter);
 
   const loadFilters = useCallback(async (signal?: AbortSignal) => {
     setAreFiltersLoading(true);
@@ -1611,6 +1712,83 @@ export function PriceMonitoringPage() {
     void loadStoredObservations(currentRunId.trim(), controller.signal);
     return () => controller.abort();
   }, [currentRunId, includeUnmatchedObservations, loadStoredObservations]);
+
+  useEffect(() => {
+    const runId = currentRunId.trim();
+    setPersistedState({
+      source,
+      q,
+      selectedFamily,
+      selectedCategory,
+      selectedSubCategory,
+      manufacturer,
+      marketplace,
+      selectedModelText,
+      excludedModelText,
+      includeIgnored,
+      automationEligibleOnly,
+      atomicOnly,
+      hasMpn,
+      currentRunId: runId,
+      currentExecutionId:
+        fetchResult?.execution_id === null || fetchResult?.execution_id === undefined
+          ? persistedState.currentExecutionId
+          : String(fetchResult.execution_id),
+      fetchSource,
+      catalogUrl,
+      enrichedCsvPath,
+      storedMatchStatus,
+      includeUnmatchedObservations,
+      storedModelFilter,
+      storedMpnFilter,
+      reviewCsvPath,
+      useCustomExportPath,
+      selectedExportArtifactRoot,
+      exportOutputPath,
+      reviewActionDrafts: Object.entries(rowActions)
+        .filter(
+          ([, action]) =>
+            action.selected_action || action.undercut_amount.trim() || action.reason.trim(),
+        )
+        .map(([model, action]) => ({
+          run_id: runId,
+          model,
+          selected_action: action.selected_action,
+          undercut_amount: action.undercut_amount,
+          reason: action.reason,
+        })),
+    });
+  }, [
+    atomicOnly,
+    automationEligibleOnly,
+    catalogUrl,
+    currentRunId,
+    enrichedCsvPath,
+    excludedModelText,
+    exportOutputPath,
+    fetchResult?.execution_id,
+    fetchSource,
+    hasMpn,
+    includeIgnored,
+    includeUnmatchedObservations,
+    manufacturer,
+    marketplace,
+    persistedState.currentExecutionId,
+    q,
+    reviewCsvPath,
+    rowActions,
+    selectedCategory,
+    selectedExportArtifactRoot,
+    selectedFamily,
+    selectedModelText,
+    selectedSubCategory,
+    setPersistedState,
+    source,
+    storedMatchStatus,
+    storedModelFilter,
+    storedMpnFilter,
+    useCustomExportPath,
+  ]);
 
   const buildSelectionBody = (dryRun: boolean) =>
     makeSelectionBody({
@@ -1864,13 +2042,27 @@ export function PriceMonitoringPage() {
       }
       await refreshRunArtifacts(runId);
     } catch (error) {
-      const message =
-        error instanceof CommerceApiError && error.status === 404
-          ? "Run details are not available from this backend. You can still use this run ID for fetch, review, and export."
-          : getCommerceApiErrorMessage(error);
-      setCurrentRunId(runId);
+      const isMissingRun = error instanceof CommerceApiError && error.status === 404;
+      const message = isMissingRun
+        ? `Saved Price Monitoring run ${runId} was not found. The saved run selection was cleared.`
+        : getCommerceApiErrorMessage(error);
+      if (isMissingRun) {
+        setCurrentRunId("");
+        setCurrentRun(null);
+        setCurrentRunFilters(null);
+        setFetchResult(null);
+        setFetchLogs(null);
+        setRunArtifacts([]);
+        setPersistedState((current) => ({
+          ...current,
+          currentRunId: "",
+          currentExecutionId: "",
+        }));
+      } else {
+        setCurrentRunId(runId);
+        await refreshRunArtifacts(runId);
+      }
       setLoadRunError(message);
-      await refreshRunArtifacts(runId);
     } finally {
       setIsLoadRunLoading(false);
     }
@@ -1955,6 +2147,16 @@ export function PriceMonitoringPage() {
       setIsCancelFetchLoading(false);
     }
   };
+
+  useEffect(() => {
+    const runId = currentRunId.trim();
+    if (restoredRunLoadedRef.current || !runId) {
+      return;
+    }
+
+    restoredRunLoadedRef.current = true;
+    void loadRun(runId);
+  });
 
   const loadReview = async () => {
     const runId = currentRunId.trim();
@@ -2212,12 +2414,54 @@ export function PriceMonitoringPage() {
     }
   };
 
+  const resetSavedWorkflowState = () => {
+    resetPersistedState();
+    const initial = initialPriceMonitoringWorkflowState;
+    setSource(initial.source);
+    setQ(initial.q);
+    setSelectedFamily(initial.selectedFamily);
+    setSelectedCategory(initial.selectedCategory);
+    setSelectedSubCategory(initial.selectedSubCategory);
+    setManufacturer(initial.manufacturer);
+    setMarketplace(initial.marketplace);
+    setSelectedModelText(initial.selectedModelText);
+    setExcludedModelText(initial.excludedModelText);
+    setIncludeIgnored(initial.includeIgnored);
+    setAutomationEligibleOnly(initial.automationEligibleOnly);
+    setAtomicOnly(initial.atomicOnly);
+    setHasMpn(initial.hasMpn);
+    setCurrentRunId(initial.currentRunId);
+    setCurrentRun(null);
+    setCurrentRunFilters(null);
+    setFetchSource(initial.fetchSource);
+    setCatalogUrl(initial.catalogUrl);
+    setFetchResult(null);
+    setFetchLogs(null);
+    setEnrichedCsvPath(initial.enrichedCsvPath);
+    setStoredMatchStatus(initial.storedMatchStatus);
+    setIncludeUnmatchedObservations(initial.includeUnmatchedObservations);
+    setStoredModelFilter(initial.storedModelFilter);
+    setStoredMpnFilter(initial.storedMpnFilter);
+    setReviewCsvPath(initial.reviewCsvPath);
+    setUseCustomExportPath(initial.useCustomExportPath);
+    setSelectedExportArtifactRoot(initial.selectedExportArtifactRoot);
+    setExportOutputPath(initial.exportOutputPath);
+    setRowActions({});
+    setReview(null);
+    setRunArtifacts([]);
+    stopFetchPolling();
+    restoredRunLoadedRef.current = true;
+  };
+
   return (
     <div className="page-stack price-monitoring-page">
       <section className="page-header">
         <p className="eyebrow">Price Monitoring</p>
         <h2>Competitor price workflow</h2>
         <p>Preview a catalog selection, fetch competitor prices, review actions, and export CSV only.</p>
+        <button className="text-button" type="button" onClick={resetSavedWorkflowState}>
+          Reset saved Price Monitoring state
+        </button>
       </section>
 
       <PriceMonitoringDbStatusBanner

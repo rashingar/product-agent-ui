@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CommerceApiError,
   commerceClient,
@@ -17,6 +17,7 @@ import type {
   PriceMonitoringSource,
 } from "../api/commerceTypes";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
+import { usePersistentPageState } from "../hooks/usePersistentPageState";
 import {
   CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE,
   formatHierarchyOptionLabel,
@@ -28,6 +29,7 @@ import {
 
 const DEFAULT_PAGE_SIZE = 100;
 const CATALOG_COLUMNS_STORAGE_KEY = "productAgentUi.catalog.columns.v1";
+const CATALOG_STATE_KEY = "product-agent-ui:catalog:v1";
 
 type CatalogColumnId =
   | "select"
@@ -59,6 +61,21 @@ interface CatalogColumnDefinition {
 interface CatalogLayoutPreferences {
   visibleColumnIds: CatalogColumnId[];
   pageSize: number;
+}
+
+interface CatalogPageState {
+  q: string;
+  selectedFamily: string;
+  selectedCategory: string;
+  selectedSubCategory: string;
+  manufacturer: string;
+  marketplace: MarketplaceFilter;
+  source: PriceMonitoringSource;
+  showComposite: boolean;
+  includeIgnored: boolean;
+  page: number;
+  pageSize: number;
+  visibleColumnIds: CatalogColumnId[];
 }
 
 const CATALOG_COLUMNS: CatalogColumnDefinition[] = [
@@ -99,6 +116,21 @@ const DEFAULT_VISIBLE_CATALOG_COLUMNS: CatalogColumnId[] = [
   "ignored",
   "warnings",
 ];
+
+const initialCatalogPageState: CatalogPageState = {
+  q: "",
+  selectedFamily: "",
+  selectedCategory: "",
+  selectedSubCategory: "",
+  manufacturer: "",
+  marketplace: "all",
+  source: "skroutz",
+  showComposite: false,
+  includeIgnored: false,
+  page: 1,
+  pageSize: DEFAULT_PAGE_SIZE,
+  visibleColumnIds: DEFAULT_VISIBLE_CATALOG_COLUMNS,
+};
 
 const REQUIRED_CATALOG_COLUMNS = CATALOG_COLUMNS.filter((column) => column.required).map(
   (column) => column.id,
@@ -384,6 +416,13 @@ function CatalogSetupHint() {
 
 export function CatalogPage() {
   const initialLayoutPreferences = useMemo(() => readCatalogLayoutPreferences(), []);
+  const filterResetMountedRef = useRef(false);
+  const [persistedState, setPersistedState, resetPersistedState] =
+    usePersistentPageState<CatalogPageState>(CATALOG_STATE_KEY, {
+      ...initialCatalogPageState,
+      pageSize: initialLayoutPreferences.pageSize,
+      visibleColumnIds: initialLayoutPreferences.visibleColumnIds,
+    });
   const [summary, setSummary] = useState<CatalogSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
@@ -404,19 +443,19 @@ export function CatalogPage() {
   const [productsError, setProductsError] = useState<string | null>(null);
   const [areProductsLoading, setAreProductsLoading] = useState(true);
 
-  const [q, setQ] = useState("");
-  const [selectedFamily, setSelectedFamily] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("");
-  const [selectedSubCategory, setSelectedSubCategory] = useState("");
-  const [manufacturer, setManufacturer] = useState("");
-  const [marketplace, setMarketplace] = useState<MarketplaceFilter>("all");
-  const [source, setSource] = useState<PriceMonitoringSource>("skroutz");
-  const [showComposite, setShowComposite] = useState(false);
-  const [includeIgnored, setIncludeIgnored] = useState(false);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(initialLayoutPreferences.pageSize);
+  const [q, setQ] = useState(persistedState.q);
+  const [selectedFamily, setSelectedFamily] = useState(persistedState.selectedFamily);
+  const [selectedCategory, setSelectedCategory] = useState(persistedState.selectedCategory);
+  const [selectedSubCategory, setSelectedSubCategory] = useState(persistedState.selectedSubCategory);
+  const [manufacturer, setManufacturer] = useState(persistedState.manufacturer);
+  const [marketplace, setMarketplace] = useState<MarketplaceFilter>(persistedState.marketplace);
+  const [source, setSource] = useState<PriceMonitoringSource>(persistedState.source);
+  const [showComposite, setShowComposite] = useState(persistedState.showComposite);
+  const [includeIgnored, setIncludeIgnored] = useState(persistedState.includeIgnored);
+  const [page, setPage] = useState(persistedState.page);
+  const [pageSize, setPageSize] = useState(persistedState.pageSize);
   const [visibleColumnIds, setVisibleColumnIds] = useState<Set<CatalogColumnId>>(
-    () => new Set(initialLayoutPreferences.visibleColumnIds),
+    () => new Set(normalizeVisibleColumnIds(persistedState.visibleColumnIds) ?? initialLayoutPreferences.visibleColumnIds),
   );
   const [selectedModels, setSelectedModels] = useState<Set<string>>(() => new Set());
 
@@ -601,6 +640,44 @@ export function CatalogPage() {
   }, [pageSize, visibleColumnIds]);
 
   useEffect(() => {
+    setPersistedState({
+      q,
+      selectedFamily,
+      selectedCategory,
+      selectedSubCategory,
+      manufacturer,
+      marketplace,
+      source,
+      showComposite,
+      includeIgnored,
+      page,
+      pageSize,
+      visibleColumnIds: CATALOG_COLUMNS.map((column) => column.id).filter((columnId) =>
+        visibleColumnIds.has(columnId),
+      ),
+    });
+  }, [
+    includeIgnored,
+    manufacturer,
+    marketplace,
+    page,
+    pageSize,
+    q,
+    selectedCategory,
+    selectedFamily,
+    selectedSubCategory,
+    setPersistedState,
+    showComposite,
+    source,
+    visibleColumnIds,
+  ]);
+
+  useEffect(() => {
+    if (!filterResetMountedRef.current) {
+      filterResetMountedRef.current = true;
+      return;
+    }
+
     setPage(1);
     setSelectedModels(new Set());
     setPreviewResult(null);
@@ -686,6 +763,25 @@ export function CatalogPage() {
     setPageSize(DEFAULT_PAGE_SIZE);
   };
 
+  const resetSavedCatalogState = () => {
+    resetPersistedState();
+    setQ(initialCatalogPageState.q);
+    setSelectedFamily(initialCatalogPageState.selectedFamily);
+    setSelectedCategory(initialCatalogPageState.selectedCategory);
+    setSelectedSubCategory(initialCatalogPageState.selectedSubCategory);
+    setManufacturer(initialCatalogPageState.manufacturer);
+    setMarketplace(initialCatalogPageState.marketplace);
+    setSource(initialCatalogPageState.source);
+    setShowComposite(initialCatalogPageState.showComposite);
+    setIncludeIgnored(initialCatalogPageState.includeIgnored);
+    setPage(initialCatalogPageState.page);
+    setPageSize(initialCatalogPageState.pageSize);
+    setVisibleColumnIds(new Set(initialCatalogPageState.visibleColumnIds));
+    setSelectedModels(new Set());
+    setPreviewResult(null);
+    setRunResult(null);
+  };
+
   const buildSelectionBody = (dryRun: boolean) =>
     makeSelectionBody(
       source,
@@ -741,6 +837,9 @@ export function CatalogPage() {
         <p className="eyebrow">Catalog</p>
         <h2>Commerce catalog</h2>
         <p>Commerce API base URL: {commerceClient.commerceApiBaseUrl}</p>
+        <button className="text-button" type="button" onClick={resetSavedCatalogState}>
+          Reset saved Catalog state
+        </button>
       </section>
 
       <section className="panel">

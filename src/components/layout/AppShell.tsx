@@ -28,10 +28,17 @@ const productAgentPaths = new Set([
   "/jobs",
 ]);
 
+const priceMonitoringNavItems = [
+  { to: "/price-monitoring", label: "Workflow" },
+  { to: "/price-monitoring/executions", label: "Executions" },
+  { to: "/price-monitoring/alerts", label: "Alerts" },
+];
+
 export function AppShell() {
   const location = useLocation();
   const isProductAgentSection =
     productAgentPaths.has(location.pathname) || location.pathname.startsWith("/jobs/");
+  const isPriceMonitoringSection = location.pathname.startsWith("/price-monitoring");
 
   return (
     <div className="app-shell">
@@ -48,9 +55,13 @@ export function AppShell() {
               className={({ isActive }) => {
                 const isProductAgentActive =
                   item.to === "/product-agent" && isProductAgentSection;
-                return isActive || isProductAgentActive ? "nav-link active" : "nav-link";
+                const isPriceMonitoringActive =
+                  item.to === "/price-monitoring" && isPriceMonitoringSection;
+                return isActive || isProductAgentActive || isPriceMonitoringActive
+                  ? "nav-link active"
+                  : "nav-link";
               }}
-              end={item.to === "/" || item.to === "/price-monitoring"}
+              end={item.to === "/"}
             >
               {item.label}
             </NavLink>
@@ -63,6 +74,20 @@ export function AppShell() {
             <NavLink
               key={item.to}
               to={item.to}
+              className={({ isActive }) => (isActive ? "subnav-link active" : "subnav-link")}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+      ) : null}
+      {isPriceMonitoringSection ? (
+        <nav className="subnav price-monitoring-subnav" aria-label="Price Monitoring navigation">
+          {priceMonitoringNavItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/price-monitoring"}
               className={({ isActive }) => (isActive ? "subnav-link active" : "subnav-link")}
             >
               {item.label}

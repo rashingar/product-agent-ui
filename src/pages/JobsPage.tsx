@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import {
   getJobIdentifier,
   getJobStatusBucket,
@@ -7,6 +7,7 @@ import {
 import { JobTable } from "../components/jobs/JobTable";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
 import { useJobs } from "../hooks/useJobs";
+import { usePersistentPageState } from "../hooks/usePersistentPageState";
 
 type StatusFilter = "all" | JobStatusBucket;
 
@@ -31,7 +32,10 @@ export function JobsPage() {
     stopJobError,
     stoppingJobIds,
   } = useJobs();
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [statusFilter, setStatusFilter, resetJobsState] = usePersistentPageState<StatusFilter>(
+    "product-agent-ui:jobs:v1",
+    "all",
+  );
 
   const filterCounts = useMemo(() => {
     const counts: Record<StatusFilter, number> = {
@@ -94,6 +98,9 @@ export function JobsPage() {
           </div>
           <button className="button secondary" type="button" onClick={() => void reload()}>
             Refresh
+          </button>
+          <button className="text-button" type="button" onClick={resetJobsState}>
+            Reset saved Jobs state
           </button>
         </div>
 

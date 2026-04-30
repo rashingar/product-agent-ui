@@ -11,7 +11,7 @@ const ACTIVE_STATUSES = new Set([
 ]);
 
 const SUCCESS_STATUSES = new Set(["succeeded", "success", "completed", "done"]);
-const FAILURE_STATUSES = new Set(["failed", "failure", "error"]);
+const FAILURE_STATUSES = new Set(["failed", "failure", "error", "killed"]);
 const CANCELLED_STATUSES = new Set(["cancelled", "canceled"]);
 export type JobStatusBucket = "active" | "succeeded" | "failed" | "cancelled" | "unknown";
 const WORKFLOW_LABELS: Record<WorkflowType, string> = {

@@ -655,9 +655,64 @@ function normalizeFetchResult(payload: unknown): FetchPriceMonitoringResult {
       typeof payload.cancelled_at === "string" || payload.cancelled_at === null
         ? payload.cancelled_at
         : null,
+    killed_at:
+      typeof payload.killed_at === "string" || payload.killed_at === null
+        ? payload.killed_at
+        : null,
     cancel_reason:
       typeof payload.cancel_reason === "string" || payload.cancel_reason === null
         ? payload.cancel_reason
+        : null,
+    killed_reason:
+      typeof payload.killed_reason === "string" || payload.killed_reason === null
+        ? payload.killed_reason
+        : null,
+    termination_mode:
+      typeof payload.termination_mode === "string" || payload.termination_mode === null
+        ? payload.termination_mode
+        : null,
+    terminate_sent_at:
+      typeof payload.terminate_sent_at === "string" || payload.terminate_sent_at === null
+        ? payload.terminate_sent_at
+        : null,
+    kill_sent_at:
+      typeof payload.kill_sent_at === "string" || payload.kill_sent_at === null
+        ? payload.kill_sent_at
+        : null,
+    exit_code:
+      typeof payload.exit_code === "number" || payload.exit_code === null ? payload.exit_code : null,
+    parent_process_id:
+      typeof payload.parent_process_id === "number" || payload.parent_process_id === null
+        ? payload.parent_process_id
+        : null,
+    process_id:
+      typeof payload.process_id === "number" || payload.process_id === null
+        ? payload.process_id
+        : null,
+    process_group_id:
+      typeof payload.process_group_id === "number" || payload.process_group_id === null
+        ? payload.process_group_id
+        : null,
+    command: Array.isArray(payload.command) ? normalizeStringArray(payload.command) : null,
+    artifacts_are_diagnostic:
+      typeof payload.artifacts_are_diagnostic === "boolean" || payload.artifacts_are_diagnostic === null
+        ? payload.artifacts_are_diagnostic
+        : null,
+    artifact_warning:
+      typeof payload.artifact_warning === "string" || payload.artifact_warning === null
+        ? payload.artifact_warning
+        : null,
+    execution_type:
+      typeof payload.execution_type === "string" || payload.execution_type === null
+        ? payload.execution_type
+        : null,
+    queue_position:
+      typeof payload.queue_position === "number" || payload.queue_position === null
+        ? payload.queue_position
+        : null,
+    stale:
+      typeof payload.stale === "boolean" || payload.stale === null
+        ? payload.stale
         : null,
     input_csv_path: normalizeArtifactPathValue(payload.input_csv_path),
     enriched_csv_path: normalizeArtifactPathValue(payload.enriched_csv_path),
@@ -1353,6 +1408,19 @@ export const commerceClient = {
         { signal },
       ),
     );
+  },
+
+  async listPriceMonitoringFetchExecutions(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<FetchPriceMonitoringResult[]> {
+    return getArrayPayload(
+      await request<unknown>(
+        `/price-monitoring/runs/${encodeURIComponent(runId)}/fetch/executions`,
+        { signal },
+      ),
+      ["executions", "items", "data", "results"],
+    ).map(normalizeFetchResult);
   },
 
   async getPriceMonitoringFetchExecutionLogs(

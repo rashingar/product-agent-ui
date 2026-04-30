@@ -13,9 +13,31 @@ import type {
 } from "../api/commerceTypes";
 import { ArtifactList } from "../components/ArtifactList";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
+import { usePersistentPageState } from "../hooks/usePersistentPageState";
 
 const DEFAULT_MAX_ROWS = 1000;
 const DEFAULT_STOCK_PATH = "C:\\Exports\\CheckWHouseBalance.csv";
+const CSV_BRIDGE_STATE_KEY = "product-agent-ui:csv-bridge:v1";
+
+interface CsvBridgePageState {
+  selectedRoot: string;
+  relativePath: string;
+  lastOpenedFilePath: string;
+  copyTargetPath: string;
+  opencartExportPath: string;
+  stockCsvPath: string;
+  outputDir: string;
+}
+
+const initialCsvBridgePageState: CsvBridgePageState = {
+  selectedRoot: "",
+  relativePath: "",
+  lastOpenedFilePath: "",
+  copyTargetPath: "",
+  opencartExportPath: "",
+  stockCsvPath: "",
+  outputDir: "",
+};
 
 function formatValue(value: unknown): string {
   if (value === null || value === undefined || value === "") {
@@ -251,24 +273,31 @@ function CsvBridgeSetupHint() {
 }
 
 export function CsvBridgePage() {
+  const [persistedState, setPersistedState, resetPersistedState] =
+    usePersistentPageState<CsvBridgePageState>(
+      CSV_BRIDGE_STATE_KEY,
+      initialCsvBridgePageState,
+      { debounceMs: 250 },
+    );
   const [roots, setRoots] = useState<FileRoot[]>([]);
-  const [selectedRoot, setSelectedRoot] = useState("");
+  const [selectedRoot, setSelectedRoot] = useState(persistedState.selectedRoot);
   const [rootsError, setRootsError] = useState<string | null>(null);
   const [areRootsLoading, setAreRootsLoading] = useState(true);
 
-  const [relativePath, setRelativePath] = useState("");
+  const [relativePath, setRelativePath] = useState(persistedState.relativePath);
   const [fileList, setFileList] = useState<FileListResponse | null>(null);
   const [fileListError, setFileListError] = useState<string | null>(null);
   const [isFileListLoading, setIsFileListLoading] = useState(false);
 
   const [csv, setCsv] = useState<ReadCsvFileResponse | null>(null);
+  const [lastOpenedFilePath, setLastOpenedFilePath] = useState(persistedState.lastOpenedFilePath);
   const [columns, setColumns] = useState<string[]>([]);
   const [rows, setRows] = useState<CsvRow[]>([]);
   const [csvReadError, setCsvReadError] = useState<string | null>(null);
   const [isCsvReadLoading, setIsCsvReadLoading] = useState(false);
   const [isDirty, setIsDirty] = useState(false);
 
-  const [copyTargetPath, setCopyTargetPath] = useState("");
+  const [copyTargetPath, setCopyTargetPath] = useState(persistedState.copyTargetPath);
   const [saveCopyResult, setSaveCopyResult] = useState<SaveCsvResponse | null>(null);
   const [saveCopyError, setSaveCopyError] = useState<string | null>(null);
   const [isSaveCopyLoading, setIsSaveCopyLoading] = useState(false);
@@ -278,9 +307,9 @@ export function CsvBridgePage() {
   const [saveInPlaceError, setSaveInPlaceError] = useState<string | null>(null);
   const [isSaveInPlaceLoading, setIsSaveInPlaceLoading] = useState(false);
 
-  const [opencartExportPath, setOpencartExportPath] = useState("");
-  const [stockCsvPath, setStockCsvPath] = useState("");
-  const [outputDir, setOutputDir] = useState("");
+  const [opencartExportPath, setOpencartExportPath] = useState(persistedState.opencartExportPath);
+  const [stockCsvPath, setStockCsvPath] = useState(persistedState.stockCsvPath);
+  const [outputDir, setOutputDir] = useState(persistedState.outputDir);
   const [bridgeResult, setBridgeResult] = useState<BridgeRunResponse | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
   const [bridgeArtifactItems, setBridgeArtifactItems] = useState<ArtifactItem[]>([]);
@@ -358,6 +387,27 @@ export function CsvBridgePage() {
     return () => controller.abort();
   }, [loadFiles, relativePath, selectedRoot]);
 
+  useEffect(() => {
+    setPersistedState({
+      selectedRoot,
+      relativePath,
+      lastOpenedFilePath,
+      copyTargetPath,
+      opencartExportPath,
+      stockCsvPath,
+      outputDir,
+    });
+  }, [
+    copyTargetPath,
+    lastOpenedFilePath,
+    opencartExportPath,
+    outputDir,
+    relativePath,
+    selectedRoot,
+    setPersistedState,
+    stockCsvPath,
+  ]);
+
   const openCsv = async (path: string) => {
     setIsCsvReadLoading(true);
     setCsvReadError(null);
@@ -368,6 +418,7 @@ export function CsvBridgePage() {
         max_rows: DEFAULT_MAX_ROWS,
       });
       setCsv(nextCsv);
+      setLastOpenedFilePath(nextCsv.path || path);
       setColumns(nextCsv.columns);
       setRows(nextCsv.rows);
       setCopyTargetPath(makeCopyPath(nextCsv.path || path));
@@ -505,12 +556,26 @@ export function CsvBridgePage() {
   );
   const canRunBridge = opencartExportPath.trim().length > 0 && !isBridgeLoading;
 
+  const resetSavedCsvBridgeState = () => {
+    resetPersistedState();
+    setSelectedRoot(initialCsvBridgePageState.selectedRoot);
+    setRelativePath(initialCsvBridgePageState.relativePath);
+    setLastOpenedFilePath(initialCsvBridgePageState.lastOpenedFilePath);
+    setCopyTargetPath(initialCsvBridgePageState.copyTargetPath);
+    setOpencartExportPath(initialCsvBridgePageState.opencartExportPath);
+    setStockCsvPath(initialCsvBridgePageState.stockCsvPath);
+    setOutputDir(initialCsvBridgePageState.outputDir);
+  };
+
   return (
     <div className="page-stack csv-bridge-page">
       <section className="page-header">
         <p className="eyebrow">CSV/Bridge</p>
         <h2>CSV bridge workspace</h2>
         <p>Browse backend-approved roots, edit CSV rows as strings, and run the bridge.</p>
+        <button className="text-button" type="button" onClick={resetSavedCsvBridgeState}>
+          Reset saved CSV/Bridge state
+        </button>
       </section>
 
       <section className="panel">

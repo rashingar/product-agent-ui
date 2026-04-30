@@ -1,4 +1,4 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { ModelJobRequest } from "../../api/types";
 
 interface ModelJobFormProps {
@@ -7,6 +7,8 @@ interface ModelJobFormProps {
   error: string | null;
   isSubmitting: boolean;
   onSubmit: (request: ModelJobRequest) => void;
+  initialModel?: string;
+  onModelChange?: (model: string) => void;
 }
 
 export function ModelJobForm({
@@ -15,9 +17,19 @@ export function ModelJobForm({
   error,
   isSubmitting,
   onSubmit,
+  initialModel = "",
+  onModelChange,
 }: ModelJobFormProps) {
-  const [model, setModel] = useState("");
+  const [model, setModel] = useState(initialModel);
   const [localError, setLocalError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setModel(initialModel);
+  }, [initialModel]);
+
+  useEffect(() => {
+    onModelChange?.(model);
+  }, [model, onModelChange]);
 
   function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

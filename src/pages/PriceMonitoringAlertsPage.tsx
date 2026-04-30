@@ -15,9 +15,11 @@ import {
   isPriceMonitoringDbAvailable,
   PriceMonitoringDbStatusBanner,
 } from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
+import { usePersistentPageState } from "../hooks/usePersistentPageState";
 
 type AlertStatusFilter = AlertEventStatus | "all";
 type RuleTargetMode = "product_id" | "catalog_model" | "catalog_mpn";
+const PRICE_ALERTS_STATE_KEY = "product-agent-ui:price-alerts:v1";
 
 interface AlertCounts {
   open: number;
@@ -36,6 +38,16 @@ interface RuleFormState {
   threshold_amount: string;
   threshold_percent: string;
   active: boolean;
+}
+
+interface PriceAlertsPageState {
+  statusFilter: AlertStatusFilter;
+  modelFilter: string;
+  runIdFilter: string;
+  productIdFilter: string;
+  ruleForm: RuleFormState;
+  editingRuleId: string | number | null;
+  evaluateRunId: string;
 }
 
 const EMPTY_COUNTS: AlertCounts = {
@@ -347,15 +359,32 @@ export function PriceMonitoringAlertsPage() {
   const [searchParams] = useSearchParams();
   const searchText = searchParams.toString();
   const initialRuleForm = useMemo(() => getInitialRuleForm(new URLSearchParams(searchText)), [searchText]);
+  const initialPersistedAlertsState = useMemo<PriceAlertsPageState>(
+    () => ({
+      statusFilter: "open",
+      modelFilter: "",
+      runIdFilter: "",
+      productIdFilter: "",
+      ruleForm: initialRuleForm,
+      editingRuleId: null,
+      evaluateRunId: "",
+    }),
+    [initialRuleForm],
+  );
+  const [persistedState, setPersistedState, resetPersistedState] =
+    usePersistentPageState<PriceAlertsPageState>(
+      PRICE_ALERTS_STATE_KEY,
+      initialPersistedAlertsState,
+    );
 
   const [counts, setCounts] = useState<AlertCounts>(EMPTY_COUNTS);
   const [events, setEvents] = useState<AlertEvent[]>([]);
   const [eventCount, setEventCount] = useState(0);
   const [rules, setRules] = useState<AlertRule[]>([]);
-  const [statusFilter, setStatusFilter] = useState<AlertStatusFilter>("open");
-  const [modelFilter, setModelFilter] = useState("");
-  const [runIdFilter, setRunIdFilter] = useState("");
-  const [productIdFilter, setProductIdFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState<AlertStatusFilter>(persistedState.statusFilter);
+  const [modelFilter, setModelFilter] = useState(persistedState.modelFilter);
+  const [runIdFilter, setRunIdFilter] = useState(persistedState.runIdFilter);
+  const [productIdFilter, setProductIdFilter] = useState(persistedState.productIdFilter);
   const [isEventsLoading, setIsEventsLoading] = useState(false);
   const [isCountsLoading, setIsCountsLoading] = useState(false);
   const [isRulesLoading, setIsRulesLoading] = useState(false);
@@ -364,12 +393,14 @@ export function PriceMonitoringAlertsPage() {
   const [rulesError, setRulesError] = useState<string | null>(null);
   const [actionEventId, setActionEventId] = useState<string | number | null>(null);
   const [ruleActionId, setRuleActionId] = useState<string | number | null>(null);
-  const [ruleForm, setRuleForm] = useState<RuleFormState>(initialRuleForm);
-  const [editingRuleId, setEditingRuleId] = useState<string | number | null>(null);
+  const [ruleForm, setRuleForm] = useState<RuleFormState>(persistedState.ruleForm);
+  const [editingRuleId, setEditingRuleId] = useState<string | number | null>(
+    persistedState.editingRuleId,
+  );
   const [formError, setFormError] = useState<string | null>(null);
   const [formMessage, setFormMessage] = useState<string | null>(null);
   const [isSavingRule, setIsSavingRule] = useState(false);
-  const [evaluateRunId, setEvaluateRunId] = useState("");
+  const [evaluateRunId, setEvaluateRunId] = useState(persistedState.evaluateRunId);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluateError, setEvaluateError] = useState<string | null>(null);
   const [evaluateResult, setEvaluateResult] = useState<EvaluateAlertsResponse | null>(null);
@@ -378,8 +409,31 @@ export function PriceMonitoringAlertsPage() {
   const [isDbStatusLoading, setIsDbStatusLoading] = useState(false);
 
   useEffect(() => {
-    setRuleForm(initialRuleForm);
-  }, [initialRuleForm]);
+    if (searchText) {
+      setRuleForm(initialRuleForm);
+    }
+  }, [initialRuleForm, searchText]);
+
+  useEffect(() => {
+    setPersistedState({
+      statusFilter,
+      modelFilter,
+      runIdFilter,
+      productIdFilter,
+      ruleForm,
+      editingRuleId,
+      evaluateRunId,
+    });
+  }, [
+    editingRuleId,
+    evaluateRunId,
+    modelFilter,
+    productIdFilter,
+    ruleForm,
+    runIdFilter,
+    setPersistedState,
+    statusFilter,
+  ]);
 
   const loadCounts = useCallback(async (signal?: AbortSignal) => {
     setIsCountsLoading(true);
@@ -667,12 +721,30 @@ export function PriceMonitoringAlertsPage() {
     ? undefined
     : "Database is unavailable. Alert write actions are disabled.";
 
+  const resetSavedAlertsState = () => {
+    resetPersistedState();
+    setStatusFilter(initialPersistedAlertsState.statusFilter);
+    setModelFilter(initialPersistedAlertsState.modelFilter);
+    setRunIdFilter(initialPersistedAlertsState.runIdFilter);
+    setProductIdFilter(initialPersistedAlertsState.productIdFilter);
+    setRuleForm(initialPersistedAlertsState.ruleForm);
+    setEditingRuleId(initialPersistedAlertsState.editingRuleId);
+    setEvaluateRunId(initialPersistedAlertsState.evaluateRunId);
+    setFormError(null);
+    setFormMessage(null);
+    setEvaluateError(null);
+    setEvaluateResult(null);
+  };
+
   return (
     <div className="page-stack">
       <section className="page-header">
         <p className="eyebrow">Price Alerts</p>
         <h2>Price Monitoring Alerts</h2>
         <p>Dashboard-only records for competitor prices below your own price.</p>
+        <button className="text-button" type="button" onClick={resetSavedAlertsState}>
+          Reset saved Alerts state
+        </button>
       </section>
 
       <PriceMonitoringDbStatusBanner

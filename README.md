@@ -21,8 +21,8 @@ Job creation responses should include either `job_id` or `id`. The UI also accep
 
 Stop is available for queued/running-like jobs. `POST /api/jobs/{job_id}/stop` marks the
 backend job as `cancelled`; `cancelled` is terminal, so the UI stops polling once that status
-is returned. This is safe cancellation, not guaranteed hard process termination. True hard
-process termination is a future backend subprocess-runner enhancement.
+is returned. Backends may also report `killed` when they force-kill a subprocess; the UI treats
+`killed` as terminal and failure-like.
 
 The Catalog tab uses the commerce / price-fetcher API:
 
@@ -37,6 +37,7 @@ The Catalog tab uses the commerce / price-fetcher API:
 - `GET /commerce-api/price-monitoring/runs/{run_id}`
 - `POST /commerce-api/price-monitoring/runs/{run_id}/fetch`
 - `GET /commerce-api/price-monitoring/runs/{run_id}/fetch`
+- `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/executions`
 - `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/logs`
 - `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/{execution_id}`
 - `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/{execution_id}/logs`
@@ -237,7 +238,21 @@ npm run preview
   `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/logs`, and cancels active fetches with
   `POST /commerce-api/price-monitoring/runs/{run_id}/fetch/cancel`.
 - Price Monitoring fetch execution statuses are `queued`, `running`, `succeeded`, `failed`, and
-  `cancelled`. `cancelled` is terminal.
+  `killed`, and `cancelled`. `killed` is terminal and failure-like; it means the backend
+  force-killed the subprocess. Product-Agent jobs can also return `killed`, and those jobs appear
+  under Failed filters. `cancelled` remains terminal and separate from Failed.
+- Price Monitoring has section navigation for Workflow, Executions, and Alerts. The Executions
+  page shows fetch execution history for the current selected run only, with a compact Current run
+  header. Killed execution detail can refetch through the normal fetch endpoint using that
+  execution's previous source and catalog URL, creating a new execution.
+- Failed and killed Price Monitoring artifacts are shown as diagnostic artifacts by default.
+  `artifacts_are_diagnostic` is authoritative for every status, so successful executions can also
+  show artifacts as diagnostic when the backend marks them that way. Execution detail can preview
+  logs without rendering full logs inline by default.
+- Key pages preserve compact form, filter, and workflow state across route navigation and browser
+  refresh in the same session using `sessionStorage`. Per-page subtle reset actions clear saved
+  state. Large server-backed results such as catalog rows, observation tables, review tables, CSV
+  contents, and API responses are reloaded instead of permanently stored.
 - The Price Monitoring and Price Alerts pages show database status banners. When the database is
   unavailable, DB-backed write actions are disabled, but read-only tables and file-backed
   selection/fetch/review/export workflows remain visible and usable where the backend supports
