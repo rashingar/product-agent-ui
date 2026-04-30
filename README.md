@@ -37,9 +37,15 @@ The Catalog tab uses the commerce / price-fetcher API:
 - `GET /commerce-api/price-monitoring/runs/{run_id}`
 - `POST /commerce-api/price-monitoring/runs/{run_id}/fetch`
 - `GET /commerce-api/price-monitoring/runs/{run_id}/fetch`
+- `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/logs`
+- `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/{execution_id}`
+- `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/{execution_id}/logs`
+- `POST /commerce-api/price-monitoring/runs/{run_id}/fetch/cancel`
+- `POST /commerce-api/price-monitoring/runs/{run_id}/fetch/{execution_id}/cancel`
 - `GET /commerce-api/price-monitoring/runs/{run_id}/review`
 - `POST /commerce-api/price-monitoring/runs/{run_id}/review/actions`
 - `POST /commerce-api/price-monitoring/runs/{run_id}/export-price-update`
+- `GET /commerce-api/price-monitoring/db/status`
 
 The CSV/Bridge tab also uses the commerce / price-fetcher API:
 
@@ -225,6 +231,17 @@ npm run preview
 - The Price Monitoring tab supports this workflow: preview/create a selection run, fetch
   competitor prices, load review rows, choose `match_price`, `undercut`, or `ignore` actions,
   apply those review actions, and export an OpenCart price update CSV.
+- Price Monitoring fetch is asynchronous from the UI perspective. The UI starts a fetch with
+  `POST /commerce-api/price-monitoring/runs/{run_id}/fetch`, polls
+  `GET /commerce-api/price-monitoring/runs/{run_id}/fetch`, reads logs from
+  `GET /commerce-api/price-monitoring/runs/{run_id}/fetch/logs`, and cancels active fetches with
+  `POST /commerce-api/price-monitoring/runs/{run_id}/fetch/cancel`.
+- Price Monitoring fetch execution statuses are `queued`, `running`, `succeeded`, `failed`, and
+  `cancelled`. `cancelled` is terminal.
+- The Price Monitoring and Price Alerts pages show database status banners. When the database is
+  unavailable, DB-backed write actions are disabled, but read-only tables and file-backed
+  selection/fetch/review/export workflows remain visible and usable where the backend supports
+  them.
 - BestPrice fetches can include an optional `catalog_url` hint, while the backend may also
   resolve products from MPN data.
 - Price Monitoring export is CSV only. The UI does not update OpenCart automatically.

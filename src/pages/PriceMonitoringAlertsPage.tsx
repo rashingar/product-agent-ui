@@ -7,9 +7,14 @@ import type {
   AlertRule,
   CreateAlertRuleBody,
   EvaluateAlertsResponse,
+  PriceMonitoringDbStatus,
   UpdateAlertRuleBody,
 } from "../api/commerceTypes";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
+import {
+  isPriceMonitoringDbAvailable,
+  PriceMonitoringDbStatusBanner,
+} from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
 
 type AlertStatusFilter = AlertEventStatus | "all";
 type RuleTargetMode = "product_id" | "catalog_model" | "catalog_mpn";
@@ -368,6 +373,9 @@ export function PriceMonitoringAlertsPage() {
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluateError, setEvaluateError] = useState<string | null>(null);
   const [evaluateResult, setEvaluateResult] = useState<EvaluateAlertsResponse | null>(null);
+  const [dbStatus, setDbStatus] = useState<PriceMonitoringDbStatus | null>(null);
+  const [dbStatusError, setDbStatusError] = useState<string | null>(null);
+  const [isDbStatusLoading, setIsDbStatusLoading] = useState(false);
 
   useEffect(() => {
     setRuleForm(initialRuleForm);
@@ -465,11 +473,33 @@ export function PriceMonitoringAlertsPage() {
     }
   }, []);
 
+  const loadDbStatus = useCallback(async (signal?: AbortSignal) => {
+    setIsDbStatusLoading(true);
+    setDbStatusError(null);
+    try {
+      const status = await commerceClient.getPriceMonitoringDbStatus(signal);
+      if (signal?.aborted) {
+        return;
+      }
+
+      setDbStatus(status);
+    } catch (error) {
+      if (!signal?.aborted) {
+        setDbStatus(null);
+        setDbStatusError(getCommerceApiErrorMessage(error));
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setIsDbStatusLoading(false);
+      }
+    }
+  }, []);
+
   const refreshDashboard = useCallback(
     async (signal?: AbortSignal) => {
-      await Promise.all([loadCounts(signal), loadEvents(signal), loadRules(signal)]);
+      await Promise.all([loadCounts(signal), loadEvents(signal), loadRules(signal), loadDbStatus(signal)]);
     },
-    [loadCounts, loadEvents, loadRules],
+    [loadCounts, loadDbStatus, loadEvents, loadRules],
   );
 
   useEffect(() => {
@@ -483,6 +513,11 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const acknowledgeEvent = async (event: AlertEvent) => {
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setEventsError("Database is unavailable. Alert write actions are disabled.");
+      return;
+    }
+
     const eventId = getEventId(event);
     if (eventId === null) {
       return;
@@ -500,6 +535,11 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const resolveEvent = async (event: AlertEvent) => {
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setEventsError("Database is unavailable. Alert write actions are disabled.");
+      return;
+    }
+
     const eventId = getEventId(event);
     if (eventId === null) {
       return;
@@ -520,6 +560,11 @@ export function PriceMonitoringAlertsPage() {
     event.preventDefault();
     setFormError(null);
     setFormMessage(null);
+
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setFormError("Database is unavailable. Alert rule write actions are disabled.");
+      return;
+    }
 
     const { body, error } = buildRuleBody(ruleForm);
     if (error) {
@@ -561,6 +606,11 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const deactivateRule = async (rule: AlertRule) => {
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setRulesError("Database is unavailable. Alert rule write actions are disabled.");
+      return;
+    }
+
     if (rule.id === undefined) {
       setRulesError("Cannot deactivate this rule because it has no ID.");
       return;
@@ -586,6 +636,11 @@ export function PriceMonitoringAlertsPage() {
 
   const submitEvaluate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setEvaluateError("Database is unavailable. Alert evaluation write actions are disabled.");
+      return;
+    }
+
     const runId = evaluateRunId.trim();
     if (!runId) {
       setEvaluateError("Run ID is required.");
@@ -607,6 +662,10 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const thresholdsEmpty = !ruleForm.threshold_amount.trim() && !ruleForm.threshold_percent.trim();
+  const dbAvailable = isPriceMonitoringDbAvailable(dbStatus);
+  const dbUnavailableTitle = dbAvailable
+    ? undefined
+    : "Database is unavailable. Alert write actions are disabled.";
 
   return (
     <div className="page-stack">
@@ -615,6 +674,13 @@ export function PriceMonitoringAlertsPage() {
         <h2>Price Monitoring Alerts</h2>
         <p>Dashboard-only records for competitor prices below your own price.</p>
       </section>
+
+      <PriceMonitoringDbStatusBanner
+        status={dbStatus}
+        error={dbStatusError}
+        isLoading={isDbStatusLoading}
+        onRetry={() => void loadDbStatus()}
+      />
 
       <section className="panel">
         <div className="section-heading">
@@ -736,7 +802,8 @@ export function PriceMonitoringAlertsPage() {
                               <button
                                 className="button secondary"
                                 type="button"
-                                disabled={busy}
+                                disabled={busy || !dbAvailable}
+                                title={dbUnavailableTitle}
                                 onClick={() => void acknowledgeEvent(event)}
                               >
                                 Acknowledge
@@ -746,7 +813,8 @@ export function PriceMonitoringAlertsPage() {
                               <button
                                 className="button secondary"
                                 type="button"
-                                disabled={busy}
+                                disabled={busy || !dbAvailable}
+                                title={dbUnavailableTitle}
                                 onClick={() => void resolveEvent(event)}
                               >
                                 Resolve
@@ -825,7 +893,8 @@ export function PriceMonitoringAlertsPage() {
                           <button
                             className="button secondary"
                             type="button"
-                            disabled={busy || rule.active === false}
+                            disabled={busy || rule.active === false || !dbAvailable}
+                            title={dbUnavailableTitle}
                             onClick={() => void deactivateRule(rule)}
                           >
                             Deactivate
@@ -954,8 +1023,18 @@ export function PriceMonitoringAlertsPage() {
           ) : null}
           {formError ? <p className="form-error">{formError}</p> : null}
           {formMessage ? <p className="state-block">{formMessage}</p> : null}
+          {!dbAvailable ? (
+            <p className="form-warning">
+              Database is unavailable. Read-only views may fail, and alert write actions are disabled until PostgreSQL is configured, reachable, and migrated.
+            </p>
+          ) : null}
 
-          <button className="button primary inline-button" type="submit" disabled={isSavingRule}>
+          <button
+            className="button primary inline-button"
+            type="submit"
+            disabled={isSavingRule || !dbAvailable}
+            title={dbUnavailableTitle}
+          >
             {isSavingRule ? "Saving..." : editingRuleId === null ? "Create rule" : "Update rule"}
           </button>
         </form>
@@ -974,7 +1053,12 @@ export function PriceMonitoringAlertsPage() {
             Run ID
             <input value={evaluateRunId} onChange={(event) => setEvaluateRunId(event.target.value)} />
           </label>
-          <button className="button primary" type="submit" disabled={isEvaluating}>
+          <button
+            className="button primary"
+            type="submit"
+            disabled={isEvaluating || !dbAvailable}
+            title={dbUnavailableTitle}
+          >
             {isEvaluating ? "Evaluating..." : "Evaluate alerts for run"}
           </button>
         </form>

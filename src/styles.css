@@ -669,6 +669,45 @@ textarea {
   color: var(--muted);
 }
 
+.db-status-banner {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 18px;
+  background: var(--surface);
+}
+
+.db-status-banner.ok {
+  border-color: #b8dfc7;
+  background: var(--success-bg);
+}
+
+.db-status-banner.warning {
+  border-color: #f0d27a;
+  background: var(--warning-bg);
+}
+
+.db-status-banner.danger {
+  border-color: #f2b8b5;
+  background: var(--danger-bg);
+}
+
+.db-status-hints {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+.fetch-logs-panel summary {
+  cursor: pointer;
+}
+
+.fetch-log-block {
+  max-height: 320px;
+}
+
 .table-wrap {
   overflow-x: auto;
 }

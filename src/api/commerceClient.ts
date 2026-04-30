@@ -25,6 +25,7 @@ import type {
   CatalogSnapshotResponse,
   CatalogSubCategoryNode,
   CatalogSummary,
+  CancelPriceMonitoringFetchBody,
   CreateAlertRuleBody,
   EvaluateAlertsResponse,
   ExportPriceMonitoringPriceUpdateBody,
@@ -39,6 +40,7 @@ import type {
   PathRootsResponse,
   PriceHistoryResponse,
   PriceMonitoringDbStatus,
+  PriceMonitoringFetchLogsResponse,
   PriceObservation,
   PriceObservationsParams,
   PriceObservationsResponse,
@@ -549,12 +551,31 @@ function normalizeStringArray(value: unknown): string[] {
     : [];
 }
 
+function normalizeFetchStatus(value: unknown): string | null {
+  if (typeof value !== "string" || value.trim().length === 0) {
+    return null;
+  }
+
+  if (value === "fetch_completed") {
+    return "succeeded";
+  }
+
+  if (value === "fetch_failed") {
+    return "failed";
+  }
+
+  return value;
+}
+
 function normalizeRun(value: unknown): PriceMonitoringRun | null {
   if (!isRecord(value)) {
     return null;
   }
 
-  return value as PriceMonitoringRun;
+  return {
+    ...value,
+    latest_fetch: isRecord(value.latest_fetch) ? normalizeFetchResult(value.latest_fetch) : null,
+  } as PriceMonitoringRun;
 }
 
 function normalizeRunList(payload: unknown): PriceMonitoringRun[] {
@@ -601,12 +622,79 @@ function normalizeFetchResult(payload: unknown): FetchPriceMonitoringResult {
 
   return {
     ...payload,
+    run_id:
+      typeof payload.run_id === "string" || typeof payload.run_id === "number"
+        ? payload.run_id
+        : null,
+    execution_id:
+      typeof payload.execution_id === "string" || typeof payload.execution_id === "number"
+        ? payload.execution_id
+        : null,
+    status: normalizeFetchStatus(payload.status),
+    source:
+      typeof payload.source === "string" || payload.source === null
+        ? payload.source
+        : null,
+    catalog_url:
+      typeof payload.catalog_url === "string" || payload.catalog_url === null
+        ? payload.catalog_url
+        : null,
+    queued_at:
+      typeof payload.queued_at === "string" || payload.queued_at === null
+        ? payload.queued_at
+        : null,
+    started_at:
+      typeof payload.started_at === "string" || payload.started_at === null
+        ? payload.started_at
+        : null,
+    completed_at:
+      typeof payload.completed_at === "string" || payload.completed_at === null
+        ? payload.completed_at
+        : null,
+    cancelled_at:
+      typeof payload.cancelled_at === "string" || payload.cancelled_at === null
+        ? payload.cancelled_at
+        : null,
+    cancel_reason:
+      typeof payload.cancel_reason === "string" || payload.cancel_reason === null
+        ? payload.cancel_reason
+        : null,
     input_csv_path: normalizeArtifactPathValue(payload.input_csv_path),
     enriched_csv_path: normalizeArtifactPathValue(payload.enriched_csv_path),
     fetch_summary_path: normalizeArtifactPathValue(payload.fetch_summary_path),
     fetch_result_path: normalizeArtifactPathValue(payload.fetch_result_path),
+    execution_path: normalizeArtifactPathValue(payload.execution_path),
+    log_path: normalizeArtifactPathValue(payload.log_path),
+    error:
+      typeof payload.error === "string" || payload.error === null
+        ? payload.error
+        : null,
     warnings: normalizeStringArray(payload.warnings),
     persistence_warnings: normalizeStringArray(payload.persistence_warnings),
+    alert_warnings: normalizeStringArray(payload.alert_warnings),
+    artifacts: getArrayPayload(payload.artifacts, ["items", "artifacts", "data", "results"])
+      .map(normalizeCommerceArtifact)
+      .filter((item): item is ArtifactItem => item !== null),
+  };
+}
+
+function normalizeFetchLogs(payload: unknown): PriceMonitoringFetchLogsResponse {
+  if (!isRecord(payload)) {
+    return {
+      lines: normalizeStringArray(payload),
+    };
+  }
+
+  return {
+    run_id:
+      typeof payload.run_id === "string" || typeof payload.run_id === "number"
+        ? payload.run_id
+        : null,
+    execution_id:
+      typeof payload.execution_id === "string" || typeof payload.execution_id === "number"
+        ? payload.execution_id
+        : null,
+    lines: normalizeStringArray(payload.lines ?? payload.logs ?? payload.items),
   };
 }
 
@@ -621,6 +709,7 @@ function normalizeDbStatus(payload: unknown): PriceMonitoringDbStatus {
   }
 
   return {
+    ...payload,
     configured: payload.configured === true,
     reachable: payload.reachable === true,
     dialect:
@@ -631,6 +720,28 @@ function normalizeDbStatus(payload: unknown): PriceMonitoringDbStatus {
       typeof payload.error === "string" || payload.error === null
         ? payload.error
         : null,
+    required_tables_present:
+      typeof payload.required_tables_present === "boolean" || payload.required_tables_present === null
+        ? payload.required_tables_present
+        : null,
+    alembic_up_to_date:
+      typeof payload.alembic_up_to_date === "boolean" || payload.alembic_up_to_date === null
+        ? payload.alembic_up_to_date
+        : null,
+    alembic_current_revision:
+      typeof payload.alembic_current_revision === "string" || payload.alembic_current_revision === null
+        ? payload.alembic_current_revision
+        : null,
+    alembic_head_revision:
+      typeof payload.alembic_head_revision === "string" || payload.alembic_head_revision === null
+        ? payload.alembic_head_revision
+        : null,
+    setup_hints:
+      Array.isArray(payload.setup_hints)
+        ? normalizeStringArray(payload.setup_hints)
+        : payload.setup_hints === null
+          ? null
+          : undefined,
   };
 }
 
@@ -1206,6 +1317,92 @@ export const commerceClient = {
       await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}/fetch`, {
         signal,
       }),
+    );
+  },
+
+  async getPriceMonitoringFetch(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<FetchPriceMonitoringResult> {
+    return normalizeFetchResult(
+      await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}/fetch`, {
+        signal,
+      }),
+    );
+  },
+
+  async getPriceMonitoringFetchLogs(
+    runId: string,
+    signal?: AbortSignal,
+  ): Promise<PriceMonitoringFetchLogsResponse> {
+    return normalizeFetchLogs(
+      await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}/fetch/logs`, {
+        signal,
+      }),
+    );
+  },
+
+  async getPriceMonitoringFetchExecution(
+    runId: string,
+    executionId: string | number,
+    signal?: AbortSignal,
+  ): Promise<FetchPriceMonitoringResult> {
+    return normalizeFetchResult(
+      await request<unknown>(
+        `/price-monitoring/runs/${encodeURIComponent(runId)}/fetch/${encodeURIComponent(String(executionId))}`,
+        { signal },
+      ),
+    );
+  },
+
+  async getPriceMonitoringFetchExecutionLogs(
+    runId: string,
+    executionId: string | number,
+    signal?: AbortSignal,
+  ): Promise<PriceMonitoringFetchLogsResponse> {
+    return normalizeFetchLogs(
+      await request<unknown>(
+        `/price-monitoring/runs/${encodeURIComponent(runId)}/fetch/${encodeURIComponent(String(executionId))}/logs`,
+        { signal },
+      ),
+    );
+  },
+
+  async cancelPriceMonitoringFetch(
+    runId: string,
+    reason?: string | null,
+    signal?: AbortSignal,
+  ): Promise<FetchPriceMonitoringResult> {
+    const body: CancelPriceMonitoringFetchBody | undefined =
+      reason === undefined ? undefined : { reason };
+
+    return normalizeFetchResult(
+      await request<unknown>(`/price-monitoring/runs/${encodeURIComponent(runId)}/fetch/cancel`, {
+        method: "POST",
+        body,
+        signal,
+      }),
+    );
+  },
+
+  async cancelPriceMonitoringFetchExecution(
+    runId: string,
+    executionId: string | number,
+    reason?: string | null,
+    signal?: AbortSignal,
+  ): Promise<FetchPriceMonitoringResult> {
+    const body: CancelPriceMonitoringFetchBody | undefined =
+      reason === undefined ? undefined : { reason };
+
+    return normalizeFetchResult(
+      await request<unknown>(
+        `/price-monitoring/runs/${encodeURIComponent(runId)}/fetch/${encodeURIComponent(String(executionId))}/cancel`,
+        {
+          method: "POST",
+          body,
+          signal,
+        },
+      ),
     );
   },
 

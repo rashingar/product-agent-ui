@@ -168,6 +168,7 @@ export interface PriceMonitoringRun {
   skipped_by_reason?: Record<string, number>;
   created_at?: string | null;
   updated_at?: string | null;
+  latest_fetch?: FetchPriceMonitoringResult | null;
   [key: string]: unknown;
 }
 
@@ -177,14 +178,24 @@ export interface FetchPriceMonitoringBody {
 }
 
 export interface FetchPriceMonitoringResult {
-  status?: string | null;
+  run_id?: string | number | null;
+  execution_id?: string | number | null;
+  status?: "queued" | "running" | "succeeded" | "failed" | "cancelled" | string | null;
   source?: PriceMonitoringSource | string | null;
+  catalog_url?: string | null;
+  queued_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+  cancelled_at?: string | null;
+  cancel_reason?: string | null;
   input_csv_path?: ArtifactPayload | string | null;
   enriched_csv_path?: ArtifactPayload | string | null;
   fetch_summary_path?: ArtifactPayload | string | null;
   fetch_result_path?: ArtifactPayload | string | null;
-  started_at?: string | null;
-  completed_at?: string | null;
+  execution_path?: ArtifactPayload | string | null;
+  log_path?: ArtifactPayload | string | null;
+  warnings?: string[];
+  error?: string | null;
   observation_count?: number;
   replaced_observation_count?: number;
   catalog_snapshot_count?: number | null;
@@ -192,10 +203,24 @@ export interface FetchPriceMonitoringResult {
   unmatched_observation_count?: number;
   was_refetch?: boolean;
   fetch_attempt?: number;
-  persistence_status?: "not_configured" | "persisted" | "failed" | string | null;
+  persistence_status?: "not_configured" | "persisted" | "failed" | "unknown" | string | null;
   persistence_warnings?: string[];
-  warnings?: string[];
+  alert_evaluation_status?: string | null;
+  alert_event_count?: number;
+  alert_duplicate_count?: number;
+  alert_warnings?: string[];
+  artifacts?: ArtifactItem[];
   [key: string]: unknown;
+}
+
+export interface PriceMonitoringFetchLogsResponse {
+  run_id?: string | number | null;
+  execution_id?: string | number | null;
+  lines: string[];
+}
+
+export interface CancelPriceMonitoringFetchBody {
+  reason?: string | null;
 }
 
 export interface PriceMonitoringDbStatus {
@@ -203,6 +228,12 @@ export interface PriceMonitoringDbStatus {
   reachable: boolean;
   dialect?: string | null;
   error?: string | null;
+  required_tables_present?: boolean | null;
+  alembic_up_to_date?: boolean | null;
+  alembic_current_revision?: string | null;
+  alembic_head_revision?: string | null;
+  setup_hints?: string[] | null;
+  [key: string]: unknown;
 }
 
 export type PriceObservationMatchStatus = "matched" | "unmatched";

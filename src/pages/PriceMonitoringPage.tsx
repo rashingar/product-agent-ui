@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   CommerceApiError,
@@ -20,6 +20,7 @@ import type {
   MarketplaceFilter,
   PathRootsResponse,
   PriceMonitoringDbStatus,
+  PriceMonitoringFetchLogsResponse,
   PriceObservation,
   PriceObservationMatchStatus,
   PriceMonitoringAction,
@@ -36,6 +37,10 @@ import type {
 import { ArtifactList } from "../components/ArtifactList";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
 import {
+  isPriceMonitoringDbAvailable,
+  PriceMonitoringDbStatusBanner,
+} from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
+import {
   CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE,
   formatHierarchyOptionLabel,
   getCategoryOptions,
@@ -46,6 +51,77 @@ import {
 
 type SourceOverride = "" | PriceMonitoringSource;
 type StoredObservationMatchFilter = "all" | PriceObservationMatchStatus;
+
+function normalizeFetchStatus(status: unknown): string {
+  if (typeof status !== "string" || status.trim().length === 0) {
+    return "";
+  }
+
+  if (status === "fetch_completed") {
+    return "succeeded";
+  }
+
+  if (status === "fetch_failed") {
+    return "failed";
+  }
+
+  return status;
+}
+
+function isActiveFetchStatus(status: unknown): boolean {
+  const normalized = normalizeFetchStatus(status);
+  return normalized === "queued" || normalized === "running";
+}
+
+function isSuccessfulFetchStatus(status: unknown): boolean {
+  return normalizeFetchStatus(status) === "succeeded";
+}
+
+function isFailedFetchStatus(status: unknown): boolean {
+  return normalizeFetchStatus(status) === "failed";
+}
+
+function isCancelledFetchStatus(status: unknown): boolean {
+  return normalizeFetchStatus(status) === "cancelled";
+}
+
+function isTerminalFetchStatus(status: unknown): boolean {
+  return (
+    isSuccessfulFetchStatus(status) ||
+    isFailedFetchStatus(status) ||
+    isCancelledFetchStatus(status)
+  );
+}
+
+function getFetchStatusTone(status: unknown): string {
+  const normalized = normalizeFetchStatus(status);
+  if (normalized === "queued" || normalized === "running") {
+    return "active";
+  }
+
+  if (normalized === "succeeded") {
+    return "ok";
+  }
+
+  if (normalized === "failed") {
+    return "danger";
+  }
+
+  if (normalized === "cancelled") {
+    return "warning";
+  }
+
+  return "neutral";
+}
+
+function formatFetchStatus(status: unknown): string {
+  const normalized = normalizeFetchStatus(status);
+  if (!normalized) {
+    return "-";
+  }
+
+  return normalized.replace(/_/g, " ").replace(/^\w/, (first) => first.toUpperCase());
+}
 
 interface RowActionState {
   selected_action: "" | PriceMonitoringAction;
@@ -406,6 +482,7 @@ function RunSummaryBlock({
   filters?: SelectionHierarchyFilters | null;
 }) {
   const hierarchyFilters = filters ?? extractSelectionFilters(run);
+  const latestFetch = isRecord(run.latest_fetch) ? (run.latest_fetch as FetchPriceMonitoringResult) : null;
 
   return (
     <div className="state-block">
@@ -419,7 +496,21 @@ function RunSummaryBlock({
         <SummaryItem label="Selection summary" value={run.selection_summary_path} />
         <SummaryItem label="Selected" value={run.selected_count} />
         <SummaryItem label="Skipped" value={run.skipped_count} />
+        <SummaryItem label="Latest fetch execution" value={latestFetch?.execution_id} />
+        <SummaryItem label="Latest fetch status" value={formatFetchStatus(latestFetch?.status)} />
+        <SummaryItem label="Latest fetch queued" value={latestFetch?.queued_at} />
+        <SummaryItem label="Latest fetch started" value={latestFetch?.started_at} />
+        <SummaryItem label="Latest fetch completed" value={latestFetch?.completed_at} />
+        <SummaryItem label="Latest fetch cancelled" value={latestFetch?.cancelled_at} />
       </dl>
+      {latestFetch?.status ? (
+        <p>
+          <span className={`status-badge ${getFetchStatusTone(latestFetch.status)}`}>
+            {formatFetchStatus(latestFetch.status)}
+          </span>
+        </p>
+      ) : null}
+      {latestFetch?.error ? <p className="form-error">{latestFetch.error}</p> : null}
       <HierarchyFilterSummary filters={hierarchyFilters} />
       {run.skipped_by_reason ? (
         <div className="compact-list">
@@ -484,23 +575,43 @@ function FetchResultBlock({
   result: FetchPriceMonitoringResult;
   onPreview: (path: string) => Promise<string>;
 }) {
-  const artifacts = artifactValuesToItems([
+  const fallbackArtifacts = artifactValuesToItems([
     result.input_csv_path,
     result.enriched_csv_path,
     result.fetch_summary_path,
     result.fetch_result_path,
+    result.execution_path,
+    result.log_path,
   ]);
+  const artifacts = result.artifacts && result.artifacts.length > 0 ? result.artifacts : fallbackArtifacts;
 
   return (
     <div className="state-block">
       <strong>Fetch result</strong>
+      {result.status ? (
+        <p>
+          <span className={`status-badge ${getFetchStatusTone(result.status)}`}>
+            {formatFetchStatus(result.status)}
+          </span>
+        </p>
+      ) : null}
       <dl className="summary-grid">
-        <SummaryItem label="Status" value={result.status} />
+        <SummaryItem label="Run ID" value={result.run_id} />
+        <SummaryItem label="Execution ID" value={result.execution_id} />
+        <SummaryItem label="Status" value={formatFetchStatus(result.status)} />
         <SummaryItem label="Source" value={result.source} />
+        <SummaryItem label="Catalog URL" value={result.catalog_url} />
+        <SummaryItem label="Queued" value={result.queued_at} />
+        <SummaryItem label="Started" value={result.started_at} />
+        <SummaryItem label="Completed" value={result.completed_at} />
+        <SummaryItem label="Cancelled" value={result.cancelled_at} />
+        <SummaryItem label="Cancel reason" value={result.cancel_reason} />
         <SummaryItem label="Input CSV" value={getArtifactPath(result.input_csv_path)} />
         <SummaryItem label="Enriched CSV" value={getArtifactPath(result.enriched_csv_path)} />
         <SummaryItem label="Fetch summary" value={getArtifactPath(result.fetch_summary_path)} />
         <SummaryItem label="Fetch result" value={getArtifactPath(result.fetch_result_path)} />
+        <SummaryItem label="Execution metadata" value={getArtifactPath(result.execution_path)} />
+        <SummaryItem label="Log path" value={getArtifactPath(result.log_path)} />
         <SummaryItem label="Observations" value={result.observation_count} />
         <SummaryItem label="Replaced observations" value={result.replaced_observation_count} />
         <SummaryItem label="Catalog snapshot" value={result.catalog_snapshot_count} />
@@ -509,8 +620,10 @@ function FetchResultBlock({
         <SummaryItem label="Fetch attempt" value={result.fetch_attempt} />
         <SummaryItem label="Was refetch" value={formatBoolean(result.was_refetch)} />
         <SummaryItem label="Persistence" value={result.persistence_status} />
-        <SummaryItem label="Started" value={result.started_at} />
-        <SummaryItem label="Completed" value={result.completed_at} />
+        <SummaryItem label="Alert evaluation status" value={result.alert_evaluation_status} />
+        <SummaryItem label="Alert events created" value={result.alert_event_count} />
+        <SummaryItem label="Alert duplicate count" value={result.alert_duplicate_count} />
+        <SummaryItem label="Error" value={result.error} />
       </dl>
       {result.persistence_status ? (
         <p>
@@ -553,7 +666,54 @@ function FetchResultBlock({
           </ul>
         </div>
       ) : null}
+      {result.alert_warnings && result.alert_warnings.length > 0 ? (
+        <div className="compact-list">
+          <strong>Alert warnings</strong>
+          <ul>
+            {result.alert_warnings.map((warning) => (
+              <li key={warning}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      {result.error ? <p className="form-error">{result.error}</p> : null}
     </div>
+  );
+}
+
+function FetchLogsPanel({
+  logs,
+  error,
+  isLoading,
+  onRefresh,
+}: {
+  logs: PriceMonitoringFetchLogsResponse | null;
+  error: string | null;
+  isLoading: boolean;
+  onRefresh: () => void;
+}) {
+  const lines = logs?.lines ?? [];
+
+  return (
+    <details className="state-block fetch-logs-panel" open={lines.length > 0 || Boolean(error)}>
+      <summary>
+        <strong>Fetch logs</strong>
+        <span className="muted"> {lines.length.toLocaleString()} lines</span>
+      </summary>
+      <div className="section-heading">
+        <div>
+          <span className="muted">Latest fetch execution logs</span>
+        </div>
+        <button className="button secondary" type="button" disabled={isLoading} onClick={onRefresh}>
+          {isLoading ? "Refreshing..." : "Refresh logs"}
+        </button>
+      </div>
+      {error ? <p className="form-error">{error}</p> : null}
+      {!error && lines.length === 0 ? <p className="muted">No fetch logs yet.</p> : null}
+      {lines.length > 0 ? (
+        <pre className="json-block fetch-log-block">{lines.join("\n")}</pre>
+      ) : null}
+    </details>
   );
 }
 
@@ -718,42 +878,13 @@ function filterStoredObservations(
   });
 }
 
-function DbStatusSummary({
-  status,
-  error,
+function ObservationTable({
+  items,
+  isDbAvailable,
 }: {
-  status: PriceMonitoringDbStatus | null;
-  error: string | null;
+  items: PriceObservation[];
+  isDbAvailable: boolean;
 }) {
-  if (error) {
-    return <ErrorState message={error} />;
-  }
-
-  if (!status) {
-    return <EmptyState title="DB status unavailable" message="Status has not been loaded yet." />;
-  }
-
-  return (
-    <div className="state-block">
-      <strong>DB status</strong>
-      <div className="button-row">
-        <span className={`status-badge ${status.configured ? "ok" : "warning"}`}>
-          {status.configured ? "Configured" : "Not configured"}
-        </span>
-        <span className={`status-badge ${status.reachable ? "ok" : "warning"}`}>
-          {status.reachable ? "Reachable" : "Not reachable"}
-        </span>
-        {status.dialect ? <span className="status-badge neutral">{status.dialect}</span> : null}
-      </div>
-      {!status.configured ? (
-        <p className="form-warning">DB persistence is not configured. Stored observations are unavailable.</p>
-      ) : null}
-      {status.error ? <p className="muted">{status.error}</p> : null}
-    </div>
-  );
-}
-
-function ObservationTable({ items }: { items: PriceObservation[] }) {
   if (items.length === 0) {
     return <EmptyState title="No stored observations" message="No observations matched the current filters." />;
   }
@@ -812,9 +943,19 @@ function ObservationTable({ items }: { items: PriceObservation[] }) {
                 </td>
                 <td className="nowrap-cell">{formatValue(item.observed_at)}</td>
                 <td>
-                  <Link className="button secondary" to={getCreateAlertLink(item)}>
-                    Create alert
-                  </Link>
+                  {isDbAvailable ? (
+                    <Link className="button secondary" to={getCreateAlertLink(item)}>
+                      Create alert
+                    </Link>
+                  ) : (
+                    <span
+                      className="button secondary disabled-link"
+                      aria-disabled="true"
+                      title="Database is unavailable. Alert write actions are disabled."
+                    >
+                      Create alert
+                    </span>
+                  )}
                 </td>
               </tr>
             );
@@ -888,6 +1029,7 @@ function StoredObservationsSection({
   runId,
   dbStatus,
   dbStatusError,
+  isDbStatusLoading,
   isLoading,
   observations,
   catalogSnapshot,
@@ -903,10 +1045,12 @@ function StoredObservationsSection({
   onModelFilterChange,
   onMpnFilterChange,
   onRefresh,
+  onRetryDbStatus,
 }: {
   runId: string;
   dbStatus: PriceMonitoringDbStatus | null;
   dbStatusError: string | null;
+  isDbStatusLoading: boolean;
   isLoading: boolean;
   observations: RunPriceObservationsResponse | null;
   catalogSnapshot: CatalogSnapshotResponse | null;
@@ -922,6 +1066,7 @@ function StoredObservationsSection({
   onModelFilterChange: (value: string) => void;
   onMpnFilterChange: (value: string) => void;
   onRefresh: () => void;
+  onRetryDbStatus: () => void;
 }) {
   const filteredItems = filterStoredObservations(
     observations?.items ?? [],
@@ -929,6 +1074,7 @@ function StoredObservationsSection({
     modelFilter,
     mpnFilter,
   );
+  const dbAvailable = isPriceMonitoringDbAvailable(dbStatus);
 
   return (
     <section className="panel">
@@ -942,7 +1088,12 @@ function StoredObservationsSection({
         </button>
       </div>
 
-      <DbStatusSummary status={dbStatus} error={dbStatusError} />
+      <PriceMonitoringDbStatusBanner
+        status={dbStatus}
+        error={dbStatusError}
+        isLoading={isDbStatusLoading}
+        onRetry={onRetryDbStatus}
+      />
 
       {!runId ? (
         <EmptyState title="No run selected" message="Select or create a run to view stored observations." />
@@ -1016,7 +1167,9 @@ function StoredObservationsSection({
 
           {isLoading ? <LoadingState label="Loading stored observations..." /> : null}
           {observationError ? <ErrorState message={observationError} onRetry={onRefresh} /> : null}
-          {!observationError && !isLoading ? <ObservationTable items={filteredItems} /> : null}
+          {!observationError && !isLoading ? (
+            <ObservationTable items={filteredItems} isDbAvailable={dbAvailable} />
+          ) : null}
           {catalogSnapshotError ? <ErrorState message={catalogSnapshotError} onRetry={onRefresh} /> : null}
           {!catalogSnapshotError && !isLoading ? <CatalogSnapshotTable snapshot={catalogSnapshot} /> : null}
         </>
@@ -1186,6 +1339,8 @@ function BackendPathsPanel({
 }
 
 export function PriceMonitoringPage() {
+  const fetchPollIntervalRef = useRef<number | null>(null);
+  const fetchPollControllerRef = useRef<AbortController | null>(null);
   const [categoryHierarchy, setCategoryHierarchy] =
     useState<CatalogCategoryHierarchyResponse | null>(null);
   const [brands, setBrands] = useState<CatalogBrandOption[]>([]);
@@ -1233,6 +1388,10 @@ export function PriceMonitoringPage() {
   const [fetchResult, setFetchResult] = useState<FetchPriceMonitoringResult | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [isFetchLoading, setIsFetchLoading] = useState(false);
+  const [fetchLogs, setFetchLogs] = useState<PriceMonitoringFetchLogsResponse | null>(null);
+  const [fetchLogsError, setFetchLogsError] = useState<string | null>(null);
+  const [isFetchLogsLoading, setIsFetchLogsLoading] = useState(false);
+  const [isCancelFetchLoading, setIsCancelFetchLoading] = useState(false);
 
   const [enrichedCsvPath, setEnrichedCsvPath] = useState("");
   const [review, setReview] = useState<PriceMonitoringReviewResponse | null>(null);
@@ -1259,6 +1418,7 @@ export function PriceMonitoringPage() {
   const [isPathRootsLoading, setIsPathRootsLoading] = useState(false);
   const [dbStatus, setDbStatus] = useState<PriceMonitoringDbStatus | null>(null);
   const [dbStatusError, setDbStatusError] = useState<string | null>(null);
+  const [isDbStatusLoading, setIsDbStatusLoading] = useState(false);
   const [storedObservations, setStoredObservations] =
     useState<RunPriceObservationsResponse | null>(null);
   const [catalogSnapshot, setCatalogSnapshot] = useState<CatalogSnapshotResponse | null>(null);
@@ -1357,6 +1517,7 @@ export function PriceMonitoringPage() {
   }, []);
 
   const loadDbStatus = useCallback(async (signal?: AbortSignal) => {
+    setIsDbStatusLoading(true);
     setDbStatusError(null);
     try {
       const status = await commerceClient.getPriceMonitoringDbStatus(signal);
@@ -1372,6 +1533,10 @@ export function PriceMonitoringPage() {
         setDbStatusError(getCommerceApiErrorMessage(error));
       }
       return null;
+    } finally {
+      if (!signal?.aborted) {
+        setIsDbStatusLoading(false);
+      }
     }
   }, []);
 
@@ -1485,6 +1650,122 @@ export function PriceMonitoringPage() {
     }
   };
 
+  const stopFetchPolling = useCallback(() => {
+    if (fetchPollIntervalRef.current !== null) {
+      window.clearInterval(fetchPollIntervalRef.current);
+      fetchPollIntervalRef.current = null;
+    }
+
+    fetchPollControllerRef.current?.abort();
+    fetchPollControllerRef.current = null;
+  }, []);
+
+  const updateFetchResultState = useCallback((result: FetchPriceMonitoringResult) => {
+    setFetchResult(result);
+    const nextEnrichedCsvPath = getArtifactPath(result.enriched_csv_path);
+    if (nextEnrichedCsvPath) {
+      setEnrichedCsvPath(nextEnrichedCsvPath);
+    }
+  }, []);
+
+  const loadFetchLogs = useCallback(
+    async (runId = currentRunId.trim(), signal?: AbortSignal, showLoading = true) => {
+      if (!runId) {
+        setFetchLogs(null);
+        return null;
+      }
+
+      if (showLoading) {
+        setIsFetchLogsLoading(true);
+      }
+      setFetchLogsError(null);
+
+      try {
+        const logs = await commerceClient.getPriceMonitoringFetchLogs(runId, signal);
+        if (signal?.aborted) {
+          return null;
+        }
+
+        setFetchLogs(logs);
+        return logs;
+      } catch (error) {
+        if (!signal?.aborted) {
+          setFetchLogsError(getCommerceApiErrorMessage(error));
+        }
+        return null;
+      } finally {
+        if (!signal?.aborted && showLoading) {
+          setIsFetchLogsLoading(false);
+        }
+      }
+    },
+    [currentRunId],
+  );
+
+  const finishTerminalFetch = useCallback(
+    async (runId: string, result: FetchPriceMonitoringResult, signal?: AbortSignal) => {
+      if (isSuccessfulFetchStatus(result.status)) {
+        await Promise.allSettled([
+          commerceClient.getPriceMonitoringRun(runId, signal).then((run) => {
+            setCurrentRun(run);
+            setCurrentRunFilters(null);
+          }),
+          refreshRunArtifacts(runId),
+          result.persistence_status === "persisted" && isPriceMonitoringDbAvailable(dbStatus)
+            ? loadStoredObservations(runId, signal)
+            : Promise.resolve(),
+        ]);
+      }
+
+      if (isFailedFetchStatus(result.status) && result.error) {
+        setFetchError(result.error);
+      }
+    },
+    [dbStatus, loadStoredObservations],
+  );
+
+  const pollFetchOnce = useCallback(
+    async (runId: string, signal?: AbortSignal) => {
+      try {
+        const result = await commerceClient.getPriceMonitoringFetch(runId, signal);
+        if (signal?.aborted) {
+          return;
+        }
+
+        updateFetchResultState(result);
+        await loadFetchLogs(runId, signal, false);
+
+        if (isTerminalFetchStatus(result.status)) {
+          if (fetchPollIntervalRef.current !== null) {
+            window.clearInterval(fetchPollIntervalRef.current);
+            fetchPollIntervalRef.current = null;
+          }
+          await finishTerminalFetch(runId, result);
+          stopFetchPolling();
+        }
+      } catch (error) {
+        if (!signal?.aborted) {
+          setFetchError(getCommerceApiErrorMessage(error));
+        }
+      }
+    },
+    [finishTerminalFetch, loadFetchLogs, stopFetchPolling, updateFetchResultState],
+  );
+
+  const startFetchPolling = useCallback(
+    (runId: string) => {
+      stopFetchPolling();
+      const controller = new AbortController();
+      fetchPollControllerRef.current = controller;
+      fetchPollIntervalRef.current = window.setInterval(() => {
+        void pollFetchOnce(runId, controller.signal);
+      }, 2500);
+    },
+    [pollFetchOnce, stopFetchPolling],
+  );
+
+  useEffect(() => stopFetchPolling, [stopFetchPolling]);
+
   const previewArtifact = async (path: string) => {
     const response = await commerceClient.readArtifact(path, 200_000);
     return response.content;
@@ -1544,6 +1825,9 @@ export function PriceMonitoringPage() {
       setCreateFilters(hierarchyFilterSnapshot);
       setCurrentRun(result);
       setCurrentRunFilters(hierarchyFilterSnapshot);
+      stopFetchPolling();
+      setFetchResult(null);
+      setFetchLogs(null);
       if (runId) {
         setCurrentRunId(runId);
         await refreshRunArtifacts(runId);
@@ -1563,11 +1847,21 @@ export function PriceMonitoringPage() {
 
     setIsLoadRunLoading(true);
     setLoadRunError(null);
+    stopFetchPolling();
+    setFetchResult(null);
+    setFetchLogs(null);
     try {
       const run = await commerceClient.getPriceMonitoringRun(runId);
       setCurrentRun(run);
       setCurrentRunFilters(null);
       setCurrentRunId(runId);
+      if (run.latest_fetch) {
+        updateFetchResultState(run.latest_fetch);
+        await loadFetchLogs(runId);
+        if (isActiveFetchStatus(run.latest_fetch.status)) {
+          startFetchPolling(runId);
+        }
+      }
       await refreshRunArtifacts(runId);
     } catch (error) {
       const message =
@@ -1592,22 +1886,73 @@ export function PriceMonitoringPage() {
     setIsFetchLoading(true);
     setFetchError(null);
     setFetchResult(null);
+    setFetchLogs(null);
+    stopFetchPolling();
     try {
       const result = await commerceClient.fetchPriceMonitoringRun(runId, {
         source: fetchSource || null,
         catalog_url: catalogUrl.trim() || null,
       });
-      setFetchResult(result);
-      const nextEnrichedCsvPath = getArtifactPath(result.enriched_csv_path);
-      if (nextEnrichedCsvPath) {
-        setEnrichedCsvPath(nextEnrichedCsvPath);
+      updateFetchResultState(result);
+      await loadFetchLogs(runId);
+      if (isActiveFetchStatus(result.status)) {
+        startFetchPolling(runId);
+      } else if (isTerminalFetchStatus(result.status)) {
+        await finishTerminalFetch(runId, result);
       }
-      await refreshRunArtifacts(runId);
-      await loadStoredObservations(runId);
+    } catch (error) {
+      if (error instanceof CommerceApiError && error.status === 409) {
+        setFetchError("A fetch is already queued or running for this run. Adopting the active execution.");
+        try {
+          const latest = await commerceClient.getPriceMonitoringFetch(runId);
+          updateFetchResultState(latest);
+          await loadFetchLogs(runId);
+          if (isActiveFetchStatus(latest.status)) {
+            startFetchPolling(runId);
+          }
+        } catch (latestError) {
+          setFetchError(
+            `A fetch is already active, but the latest execution could not be loaded: ${getCommerceApiErrorMessage(latestError)}`,
+          );
+        }
+      } else {
+        setFetchError(getCommerceApiErrorMessage(error));
+      }
+    } finally {
+      setIsFetchLoading(false);
+    }
+  };
+
+  const cancelFetch = async () => {
+    const runId = currentRunId.trim();
+    if (!runId) {
+      setFetchError("Enter or create a run ID first.");
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Cancel fetch for run ${runId}? This marks the fetch execution as cancelled. Active in-process work may finish in the background.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    setIsCancelFetchLoading(true);
+    setFetchError(null);
+    try {
+      const result = await commerceClient.cancelPriceMonitoringFetch(
+        runId,
+        "cancelled from Price Monitoring page",
+      );
+      updateFetchResultState(result);
+      await loadFetchLogs(runId);
+      if (isCancelledFetchStatus(result.status) || isTerminalFetchStatus(result.status)) {
+        stopFetchPolling();
+      }
     } catch (error) {
       setFetchError(getCommerceApiErrorMessage(error));
     } finally {
-      setIsFetchLoading(false);
+      setIsCancelFetchLoading(false);
     }
   };
 
@@ -1615,6 +1960,11 @@ export function PriceMonitoringPage() {
     const runId = currentRunId.trim();
     if (!runId) {
       setReviewError("Enter or create a run ID first.");
+      return;
+    }
+
+    if (isActiveFetchStatus(fetchResult?.status)) {
+      setReviewError("Fetch is queued or running. Load review after the fetch reaches a terminal status.");
       return;
     }
 
@@ -1777,10 +2127,23 @@ export function PriceMonitoringPage() {
     useCustomExportPath,
   ]);
 
+  const isFetchActive = isActiveFetchStatus(fetchResult?.status);
+  const isReviewBlockedByFetch = isFetchActive;
+  const fetchButtonLabel = isFetchLoading
+    ? "Starting fetch..."
+    : isFetchActive
+      ? "Fetch running..."
+      : "Fetch prices";
+
   const applyActions = async () => {
     const runId = currentRunId.trim();
     if (!runId) {
       setApplyError("Enter or create a run ID first.");
+      return;
+    }
+
+    if (isActiveFetchStatus(fetchResult?.status)) {
+      setApplyError("Fetch is queued or running. Apply review actions after the fetch reaches a terminal status.");
       return;
     }
 
@@ -1822,6 +2185,11 @@ export function PriceMonitoringPage() {
       return;
     }
 
+    if (isActiveFetchStatus(fetchResult?.status)) {
+      setExportError("Fetch is queued or running. Export after the fetch reaches a terminal status.");
+      return;
+    }
+
     if (useCustomExportPath && customExportPathWarning) {
       setExportError(customExportPathWarning);
       return;
@@ -1851,6 +2219,13 @@ export function PriceMonitoringPage() {
         <h2>Competitor price workflow</h2>
         <p>Preview a catalog selection, fetch competitor prices, review actions, and export CSV only.</p>
       </section>
+
+      <PriceMonitoringDbStatusBanner
+        status={dbStatus}
+        error={dbStatusError}
+        isLoading={isDbStatusLoading}
+        onRetry={() => void loadDbStatus()}
+      />
 
       <BackendPathsPanel
         roots={pathRoots}
@@ -2054,7 +2429,11 @@ export function PriceMonitoringPage() {
             <p className="eyebrow">Existing Run / Run Status</p>
             <h3>Current run</h3>
           </div>
-          <button className="button secondary" type="button" onClick={() => void loadRuns()}>
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => void Promise.all([loadRuns(), loadDbStatus()])}
+          >
             Refresh runs
           </button>
         </div>
@@ -2092,6 +2471,8 @@ export function PriceMonitoringPage() {
                   <th>Status</th>
                   <th>Source</th>
                   <th>Selected</th>
+                  <th>Latest fetch</th>
+                  <th>Execution</th>
                   <th>Created</th>
                   <th>Actions</th>
                 </tr>
@@ -2099,12 +2480,23 @@ export function PriceMonitoringPage() {
               <tbody>
                 {runs.slice(0, 10).map((run, index) => {
                   const runId = String(run.run_id ?? run.id ?? "");
+                  const latestFetch = run.latest_fetch;
                   return (
                     <tr key={runId || index}>
                       <td>{formatValue(runId)}</td>
                       <td>{formatValue(run.status)}</td>
                       <td>{formatValue(run.source)}</td>
                       <td>{formatValue(run.selected_count)}</td>
+                      <td>
+                        {latestFetch?.status ? (
+                          <span className={`status-badge ${getFetchStatusTone(latestFetch.status)}`}>
+                            {formatFetchStatus(latestFetch.status)}
+                          </span>
+                        ) : (
+                          "-"
+                        )}
+                      </td>
+                      <td>{formatValue(latestFetch?.execution_id)}</td>
                       <td>{formatValue(run.created_at)}</td>
                       <td>
                         <button className="button secondary" type="button" onClick={() => void loadRun(runId)}>
@@ -2172,14 +2564,34 @@ export function PriceMonitoringPage() {
           </label>
         </div>
 
-        <button
-          className="button primary inline-button"
-          type="button"
-          disabled={isFetchLoading}
-          onClick={() => void fetchPrices()}
-        >
-          {isFetchLoading ? "Fetching..." : "Fetch prices"}
-        </button>
+        <div className="button-row">
+          <button
+            className="button primary"
+            type="button"
+            disabled={isFetchLoading || isFetchActive}
+            onClick={() => void fetchPrices()}
+          >
+            {fetchButtonLabel}
+          </button>
+          {isFetchActive ? (
+            <button
+              className="button danger"
+              type="button"
+              disabled={isCancelFetchLoading}
+              onClick={() => void cancelFetch()}
+            >
+              {isCancelFetchLoading ? "Cancelling..." : "Cancel fetch"}
+            </button>
+          ) : null}
+        </div>
+
+        {fetchResult?.status ? (
+          <p className="state-block">
+            <span className={`status-badge ${getFetchStatusTone(fetchResult.status)}`}>
+              {formatFetchStatus(fetchResult.status)}
+            </span>
+          </p>
+        ) : null}
 
         {fetchError ? (
           <>
@@ -2188,12 +2600,19 @@ export function PriceMonitoringPage() {
           </>
         ) : null}
         {fetchResult ? <FetchResultBlock result={fetchResult} onPreview={previewArtifact} /> : null}
+        <FetchLogsPanel
+          logs={fetchLogs}
+          error={fetchLogsError}
+          isLoading={isFetchLogsLoading}
+          onRefresh={() => void loadFetchLogs(currentRunId.trim())}
+        />
       </section>
 
       <StoredObservationsSection
         runId={currentRunId.trim()}
         dbStatus={dbStatus}
         dbStatusError={dbStatusError}
+        isDbStatusLoading={isDbStatusLoading}
         isLoading={isStoredObservationLoading}
         observations={storedObservations}
         catalogSnapshot={catalogSnapshot}
@@ -2209,6 +2628,7 @@ export function PriceMonitoringPage() {
         onModelFilterChange={setStoredModelFilter}
         onMpnFilterChange={setStoredMpnFilter}
         onRefresh={() => void loadStoredObservations(currentRunId.trim())}
+        onRetryDbStatus={() => void loadDbStatus()}
       />
 
       <section className="panel">
@@ -2218,7 +2638,13 @@ export function PriceMonitoringPage() {
             <h3>Competitor results</h3>
           </div>
           <div className="button-row">
-            <button className="button secondary" type="button" onClick={applyRecommendedActions} disabled={!review}>
+            <button
+              className="button secondary"
+              type="button"
+              onClick={applyRecommendedActions}
+              disabled={!review || isReviewBlockedByFetch}
+              title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
+            >
               Apply recommended actions
             </button>
             <button className="button secondary" type="button" onClick={clearActions} disabled={!review}>
@@ -2239,7 +2665,8 @@ export function PriceMonitoringPage() {
           <button
             className="button primary"
             type="button"
-            disabled={isReviewLoading}
+            disabled={isReviewLoading || isReviewBlockedByFetch}
+            title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
             onClick={() => void loadReview()}
           >
             {isReviewLoading ? "Loading review..." : "Load review"}
@@ -2376,7 +2803,8 @@ export function PriceMonitoringPage() {
             <button
               className="button primary inline-button"
               type="button"
-              disabled={isApplyLoading}
+              disabled={isApplyLoading || isReviewBlockedByFetch}
+              title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
               onClick={() => void applyActions()}
             >
               {isApplyLoading ? "Applying actions..." : "Apply actions"}
@@ -2481,7 +2909,8 @@ export function PriceMonitoringPage() {
         <button
           className="button primary inline-button"
           type="button"
-          disabled={isExportLoading}
+          disabled={isExportLoading || isReviewBlockedByFetch}
+          title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
           onClick={() => void exportPriceUpdate()}
         >
           {isExportLoading ? "Exporting..." : "Export OpenCart price update CSV"}
