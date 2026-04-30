@@ -8,7 +8,13 @@ import {
   useState,
 } from "react";
 import { apiClient, getApiErrorMessage } from "../api/client";
-import { getJobIdentifier, getJobStage, isActiveJob, withJobStage } from "../api/jobUtils";
+import {
+  compareJobsByUpdatedDesc,
+  getJobIdentifier,
+  getJobStage,
+  isActiveJob,
+  withJobStage,
+} from "../api/jobUtils";
 import type { Job } from "../api/types";
 
 const POLL_INTERVAL_MS = 2500;
@@ -20,8 +26,12 @@ interface GlobalJobsState {
   error: string | null;
   isPolling: boolean;
   lastLoadedAt: Date | null;
+  stoppingJobIds: string[];
+  stopJobError: string | null;
+  clearStopJobError: () => void;
   reload: () => Promise<void>;
   trackJob: (job: Job) => void;
+  stopJob: (jobId: string, reason?: string) => Promise<void>;
 }
 
 const GlobalJobsContext = createContext<GlobalJobsState | null>(null);
@@ -39,10 +49,12 @@ function mergeJob(jobs: Job[], job: Job): Job[] {
       ? withExistingStage(job, existingJob)
       : job;
   if (existingIndex === -1) {
-    return [nextJob, ...jobs];
+    return [nextJob, ...jobs].sort(compareJobsByUpdatedDesc);
   }
 
-  return jobs.map((currentJob, index) => (index === existingIndex ? nextJob : currentJob));
+  return jobs
+    .map((currentJob, index) => (index === existingIndex ? nextJob : currentJob))
+    .sort(compareJobsByUpdatedDesc);
 }
 
 function withExistingStage(job: Job, existingJob: Job): Job {
@@ -69,6 +81,8 @@ export function GlobalJobsProvider({ children }: { children: ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stoppingJobIds, setStoppingJobIds] = useState<string[]>([]);
+  const [stopJobError, setStopJobError] = useState<string | null>(null);
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
 
   const hasActiveJobs = useMemo(() => jobs.some(isActiveJob), [jobs]);
@@ -86,7 +100,9 @@ export function GlobalJobsProvider({ children }: { children: ReactNode }) {
         return;
       }
 
-      setJobs((currentJobs) => preserveKnownStages(currentJobs, nextJobs));
+      setJobs((currentJobs) =>
+        preserveKnownStages(currentJobs, nextJobs).sort(compareJobsByUpdatedDesc),
+      );
       setError(null);
       setLastLoadedAt(new Date());
     } catch (loadError) {
@@ -103,6 +119,27 @@ export function GlobalJobsProvider({ children }: { children: ReactNode }) {
 
   const trackJob = useCallback((job: Job) => {
     setJobs((currentJobs) => mergeJob(currentJobs, job));
+  }, []);
+
+  const stopJob = useCallback(async (jobId: string, reason?: string) => {
+    setStoppingJobIds((currentIds) =>
+      currentIds.includes(jobId) ? currentIds : [...currentIds, jobId],
+    );
+    setStopJobError(null);
+
+    try {
+      const stoppedJob = await apiClient.stopJob(jobId, reason);
+      setJobs((currentJobs) => mergeJob(currentJobs, stoppedJob));
+      setStopJobError(null);
+    } catch (stopError) {
+      setStopJobError(getApiErrorMessage(stopError));
+    } finally {
+      setStoppingJobIds((currentIds) => currentIds.filter((currentId) => currentId !== jobId));
+    }
+  }, []);
+
+  const clearStopJobError = useCallback(() => {
+    setStopJobError(null);
   }, []);
 
   useEffect(() => {
@@ -131,10 +168,27 @@ export function GlobalJobsProvider({ children }: { children: ReactNode }) {
       error,
       isPolling: hasActiveJobs,
       lastLoadedAt,
+      stoppingJobIds,
+      stopJobError,
+      clearStopJobError,
       reload: () => loadJobs(undefined, false),
       trackJob,
+      stopJob,
     }),
-    [error, hasActiveJobs, isLoading, isRefreshing, jobs, lastLoadedAt, loadJobs, trackJob],
+    [
+      clearStopJobError,
+      error,
+      hasActiveJobs,
+      isLoading,
+      isRefreshing,
+      jobs,
+      lastLoadedAt,
+      loadJobs,
+      stopJob,
+      stopJobError,
+      stoppingJobIds,
+      trackJob,
+    ],
   );
 
   return <GlobalJobsContext.Provider value={value}>{children}</GlobalJobsContext.Provider>;

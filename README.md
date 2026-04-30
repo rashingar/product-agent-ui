@@ -13,10 +13,16 @@ The Product-Agent UI expects these local endpoints from the Product-Agent API:
 - `POST /api/jobs/publish`
 - `GET /api/jobs`
 - `GET /api/jobs/{job_id}`
+- `POST /api/jobs/{job_id}/stop`
 - `GET /api/jobs/{job_id}/logs`
 - `GET /api/jobs/{job_id}/artifacts`
 
 Job creation responses should include either `job_id` or `id`. The UI also accepts common wrapped shapes such as `{ "job": { ... } }`, `{ "data": { ... } }`, and `{ "result": { ... } }`.
+
+Stop is available for queued/running-like jobs. `POST /api/jobs/{job_id}/stop` marks the
+backend job as `cancelled`; `cancelled` is terminal, so the UI stops polling once that status
+is returned. This is safe cancellation, not guaranteed hard process termination. True hard
+process termination is a future backend subprocess-runner enhancement.
 
 The Catalog tab uses the commerce / price-fetcher API:
 
@@ -224,3 +230,5 @@ npm run preview
 - Price Monitoring export is CSV only. The UI does not update OpenCart automatically.
 - No authentication, websocket transport, batch upload, Redux, Zustand, or React Query is included.
 - Job detail and jobs list polling runs every 2.5 seconds while queued/running-like statuses are present, then stops once the backend reports a terminal status.
+- The Jobs page sorts by most recently updated first and supports All, Active, Succeeded,
+  Failed, and Cancelled filters.

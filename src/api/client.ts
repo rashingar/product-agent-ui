@@ -6,6 +6,7 @@ import type {
   PrepareJobRequest,
   PublishJobRequest,
   RenderJobRequest,
+  StopJobRequest,
 } from "./types";
 import { withJobStage } from "./jobUtils";
 
@@ -212,6 +213,16 @@ export const apiClient = {
   async getJob(jobId: string, signal?: AbortSignal): Promise<Job> {
     return normalizeJob(
       await request<unknown>(`/api/jobs/${encodeURIComponent(jobId)}`, { signal }),
+    );
+  },
+
+  async stopJob(jobId: string, reason?: string): Promise<Job> {
+    const body: StopJobRequest = reason === undefined ? {} : { reason };
+    return normalizeJob(
+      await request<unknown>(`/api/jobs/${encodeURIComponent(jobId)}/stop`, {
+        method: "POST",
+        body,
+      }),
     );
   },
 

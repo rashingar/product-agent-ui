@@ -8,7 +8,7 @@ function getStatusTone(status: string): string {
     return "success";
   }
 
-  if (["failed", "failure", "error", "cancelled", "canceled"].includes(normalized)) {
+  if (["failed", "failure", "error", "cancelled", "canceled", "stopped"].includes(normalized)) {
     return "danger";
   }
 
@@ -24,5 +24,7 @@ function getStatusTone(status: string): string {
 }
 
 export function StatusBadge({ status }: StatusBadgeProps) {
-  return <span className={`status-badge ${getStatusTone(status)}`}>{status}</span>;
+  const normalized = status.trim().toLowerCase();
+  const label = ["cancelled", "canceled", "stopped"].includes(normalized) ? "cancelled" : status;
+  return <span className={`status-badge ${getStatusTone(status)}`}>{label}</span>;
 }

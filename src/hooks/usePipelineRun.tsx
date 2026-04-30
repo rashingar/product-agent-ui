@@ -11,6 +11,7 @@ import { apiClient, getApiErrorMessage } from "../api/client";
 import {
   getJobIdentifier,
   getJobStatus,
+  isCancelledJob,
   isActiveJob,
   isFailedJob,
   isSuccessfulJob,
@@ -21,8 +22,8 @@ import { useGlobalJobs } from "./useGlobalJobs";
 
 const POLL_INTERVAL_MS = 2500;
 
-type PipelineRunStatus = "idle" | "running" | "succeeded" | "failed";
-type PipelineStageStatus = "pending" | "queued" | "running" | "succeeded" | "failed";
+type PipelineRunStatus = "idle" | "running" | "succeeded" | "failed" | "cancelled";
+type PipelineStageStatus = "pending" | "queued" | "running" | "succeeded" | "failed" | "cancelled";
 
 export interface PipelineStageState {
   key: WorkflowType;
@@ -45,6 +46,9 @@ interface PipelineRunContextValue {
   currentRun: PipelineRunState | null;
   isRunning: boolean;
   startPipeline: (request: PrepareJobRequest) => Promise<void>;
+  stopStageJob: (jobId: string, reason?: string) => Promise<void>;
+  stoppingJobIds: string[];
+  stopJobError: string | null;
 }
 
 const INITIAL_STAGES: PipelineStageState[] = [
@@ -54,6 +58,19 @@ const INITIAL_STAGES: PipelineStageState[] = [
 ];
 
 const PipelineRunContext = createContext<PipelineRunContextValue | null>(null);
+
+class PipelineCancelledError extends Error {
+  readonly job: Job;
+  readonly stage: PipelineStageState;
+
+  constructor(job: Job, stage: PipelineStageState) {
+    const jobId = getJobIdentifier(job);
+    super(`${stage.label} cancelled${jobId ? ` (job ${jobId})` : ""}.`);
+    this.name = "PipelineCancelledError";
+    this.job = job;
+    this.stage = stage;
+  }
+}
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -139,6 +156,8 @@ function updateStage(
 export function PipelineRunProvider({ children }: { children: ReactNode }) {
   const { trackJob } = useGlobalJobs();
   const [currentRun, setCurrentRun] = useState<PipelineRunState | null>(null);
+  const [stoppingJobIds, setStoppingJobIds] = useState<string[]>([]);
+  const [stopJobError, setStopJobError] = useState<string | null>(null);
   const runningRef = useRef(false);
 
   const waitForTerminalJob = useCallback(
@@ -164,6 +183,25 @@ export function PipelineRunProvider({ children }: { children: ReactNode }) {
         await sleep(POLL_INTERVAL_MS);
         nextJob = withJobStage(await apiClient.getJob(jobId), stage.key);
         trackJob(nextJob);
+      }
+
+      if (isCancelledJob(nextJob)) {
+        setCurrentRun((run) =>
+          run
+            ? {
+                ...run,
+                status: "cancelled",
+                error: null,
+                finishedAt: new Date(),
+                stages: updateStage(run.stages, stage.key, {
+                  job: nextJob,
+                  status: "cancelled",
+                  error: undefined,
+                }),
+              }
+            : run,
+        );
+        throw new PipelineCancelledError(nextJob, stage);
       }
 
       if (isFailedJob(nextJob)) {
@@ -194,6 +232,50 @@ export function PipelineRunProvider({ children }: { children: ReactNode }) {
       }
 
       return nextJob;
+    },
+    [trackJob],
+  );
+
+  const stopStageJob = useCallback(
+    async (jobId: string, reason?: string) => {
+      setStoppingJobIds((currentIds) =>
+        currentIds.includes(jobId) ? currentIds : [...currentIds, jobId],
+      );
+      setStopJobError(null);
+
+      try {
+        const stoppedJob = await apiClient.stopJob(jobId, reason);
+        trackJob(stoppedJob);
+        setCurrentRun((run) => {
+          if (!run) {
+            return run;
+          }
+
+          const stoppedStage = run.stages.find((stage) => {
+            const stageJobId = stage.job ? getJobIdentifier(stage.job) : undefined;
+            return stageJobId === jobId;
+          });
+
+          return {
+            ...run,
+            status: "cancelled",
+            error: null,
+            finishedAt: run.finishedAt ?? new Date(),
+            stages: stoppedStage
+              ? updateStage(run.stages, stoppedStage.key, {
+                  job: withJobStage(stoppedJob, stoppedStage.key),
+                  status: "cancelled",
+                  error: undefined,
+                })
+              : run.stages,
+          };
+        });
+        setStopJobError(null);
+      } catch (stopError) {
+        setStopJobError(getApiErrorMessage(stopError));
+      } finally {
+        setStoppingJobIds((currentIds) => currentIds.filter((currentId) => currentId !== jobId));
+      }
     },
     [trackJob],
   );
@@ -282,6 +364,25 @@ export function PipelineRunProvider({ children }: { children: ReactNode }) {
             : run,
         );
       } catch (pipelineError) {
+        if (pipelineError instanceof PipelineCancelledError) {
+          setCurrentRun((run) =>
+            run
+              ? {
+                  ...run,
+                  status: "cancelled",
+                  error: null,
+                  finishedAt: run.finishedAt ?? new Date(),
+                  stages: updateStage(run.stages, pipelineError.stage.key, {
+                    job: pipelineError.job,
+                    status: "cancelled",
+                    error: undefined,
+                  }),
+                }
+              : run,
+          );
+          return;
+        }
+
         const errorMessage = getApiErrorMessage(pipelineError);
         setCurrentRun((run) =>
           run
@@ -310,8 +411,11 @@ export function PipelineRunProvider({ children }: { children: ReactNode }) {
       currentRun,
       isRunning: currentRun?.status === "running",
       startPipeline,
+      stopStageJob,
+      stoppingJobIds,
+      stopJobError,
     }),
-    [currentRun, startPipeline],
+    [currentRun, startPipeline, stopJobError, stopStageJob, stoppingJobIds],
   );
 
   return <PipelineRunContext.Provider value={value}>{children}</PipelineRunContext.Provider>;

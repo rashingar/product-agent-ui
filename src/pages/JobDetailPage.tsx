@@ -1,5 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import { getRequestPayload } from "../api/jobUtils";
+import { canStopJob, getJobIdentifier, getRequestPayload } from "../api/jobUtils";
 import { ArtifactList } from "../components/jobs/ArtifactList";
 import { JobSummary } from "../components/jobs/JobSummary";
 import { JsonBlock } from "../components/jobs/JsonBlock";
@@ -15,11 +15,34 @@ export function JobDetailPage() {
     isLoading,
     isPolling,
     isRefreshing,
+    isStopping,
     job,
     lastLoadedAt,
     logs,
     reload,
+    stopError,
+    stopJob,
   } = useJobDetail(jobId);
+
+  const handleStopJob = async () => {
+    if (!job) {
+      return;
+    }
+
+    const id = getJobIdentifier(job);
+    if (!id) {
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `Stop job ${id}? This marks the job as cancelled. Active in-process work may need the backend service to finish before resources are fully released.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await stopJob("cancelled from job detail page");
+  };
 
   return (
     <div className="page-stack">
@@ -43,10 +66,21 @@ export function JobDetailPage() {
         <button className="button secondary" type="button" onClick={() => void reload()}>
           Refresh
         </button>
+        {canStopJob(job ?? undefined) ? (
+          <button
+            className="button danger"
+            type="button"
+            disabled={isStopping}
+            onClick={() => void handleStopJob()}
+          >
+            {isStopping ? "Stopping..." : "Stop Job"}
+          </button>
+        ) : null}
       </div>
 
       {isLoading ? <LoadingState label="Loading job..." /> : null}
       {error ? <ErrorState message={error} onRetry={() => void reload()} /> : null}
+      {stopError ? <p className="form-error">{stopError}</p> : null}
 
       {!isLoading && job ? (
         <>

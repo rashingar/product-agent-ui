@@ -20,6 +20,10 @@ export type RenderJobRequest = ModelJobRequest;
 
 export type PublishJobRequest = ModelJobRequest;
 
+export interface StopJobRequest {
+  reason?: string | null;
+}
+
 export interface HealthResponse {
   status?: string;
   ok?: boolean;

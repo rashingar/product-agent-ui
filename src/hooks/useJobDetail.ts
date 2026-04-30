@@ -11,10 +11,32 @@ export function useJobDetail(jobId: string | undefined) {
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
   const [isLoading, setIsLoading] = useState(Boolean(jobId));
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [stopError, setStopError] = useState<string | null>(null);
   const [lastLoadedAt, setLastLoadedAt] = useState<Date | null>(null);
 
   const shouldPoll = useMemo(() => isActiveJob(job ?? undefined), [job]);
+
+  const loadJobAssets = useCallback(
+    async (signal?: AbortSignal) => {
+      if (!jobId) {
+        return;
+      }
+
+      const [nextLogs, nextArtifacts] = await Promise.all([
+        apiClient.getJobLogs(jobId, signal),
+        apiClient.getJobArtifacts(jobId, signal),
+      ]);
+      if (signal?.aborted) {
+        return;
+      }
+
+      setLogs(nextLogs);
+      setArtifacts(nextArtifacts);
+    },
+    [jobId],
+  );
 
   const loadJob = useCallback(
     async (signal?: AbortSignal, silent = false) => {
@@ -37,16 +59,7 @@ export function useJobDetail(jobId: string | undefined) {
         }
         setJob(nextJob);
 
-        const [nextLogs, nextArtifacts] = await Promise.all([
-          apiClient.getJobLogs(jobId, signal),
-          apiClient.getJobArtifacts(jobId, signal),
-        ]);
-        if (signal?.aborted) {
-          return;
-        }
-
-        setLogs(nextLogs);
-        setArtifacts(nextArtifacts);
+        await loadJobAssets(signal);
         setError(null);
         setLastLoadedAt(new Date());
       } catch (loadError) {
@@ -60,7 +73,32 @@ export function useJobDetail(jobId: string | undefined) {
         }
       }
     },
-    [jobId],
+    [jobId, loadJobAssets],
+  );
+
+  const stopJob = useCallback(
+    async (reason?: string) => {
+      if (!jobId) {
+        setStopError("Missing job id.");
+        return;
+      }
+
+      setIsStopping(true);
+      setStopError(null);
+
+      try {
+        const stoppedJob = await apiClient.stopJob(jobId, reason);
+        setJob(stoppedJob);
+        await loadJobAssets();
+        setStopError(null);
+        setLastLoadedAt(new Date());
+      } catch (stopErrorValue) {
+        setStopError(getApiErrorMessage(stopErrorValue));
+      } finally {
+        setIsStopping(false);
+      }
+    },
+    [jobId, loadJobAssets],
   );
 
   useEffect(() => {
@@ -87,9 +125,12 @@ export function useJobDetail(jobId: string | undefined) {
     artifacts,
     isLoading,
     isRefreshing,
+    isStopping,
     error,
+    stopError,
     isPolling: shouldPoll,
     lastLoadedAt,
     reload: () => loadJob(undefined, false),
+    stopJob,
   };
 }

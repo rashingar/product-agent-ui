@@ -1,12 +1,24 @@
 import { Link } from "react-router-dom";
-import { getJobIdentifier, getJobStatus } from "../api/jobUtils";
+import { canStopJob, getJobIdentifier, getJobStatus } from "../api/jobUtils";
 import { PrepareJobForm } from "../components/forms/PrepareJobForm";
 import { StatusBadge } from "../components/jobs/StatusBadge";
 import { ErrorState } from "../components/layout/StateBlocks";
 import { usePipelineRun } from "../hooks/usePipelineRun";
 
 export function PipelineJobPage() {
-  const { currentRun, isRunning, startPipeline } = usePipelineRun();
+  const { currentRun, isRunning, startPipeline, stopJobError, stopStageJob, stoppingJobIds } =
+    usePipelineRun();
+
+  const handleStopStageJob = async (jobId: string) => {
+    const confirmed = window.confirm(
+      `Stop pipeline job ${jobId}? This marks the job as cancelled and the current pipeline run will stop.`,
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await stopStageJob(jobId, "cancelled from pipeline page");
+  };
 
   return (
     <div className="page-stack narrow">
@@ -27,13 +39,14 @@ export function PipelineJobPage() {
           </div>
 
           {currentRun.error ? <ErrorState message={currentRun.error} /> : null}
+          {stopJobError ? <p className="form-error">{stopJobError}</p> : null}
 
           <ol className="pipeline-stage-list">
             {currentRun.stages.map((stage) => {
               const jobId = stage.job ? getJobIdentifier(stage.job) : undefined;
               return (
                 <li key={stage.key} className="pipeline-stage-item">
-                  <div>
+                  <div className="pipeline-stage-main">
                     <strong>{stage.label}</strong>
                     {jobId ? (
                       <Link to={`/jobs/${encodeURIComponent(jobId)}`}>{jobId}</Link>
@@ -41,7 +54,19 @@ export function PipelineJobPage() {
                       <span className="muted">No job yet</span>
                     )}
                   </div>
-                  <StatusBadge status={stage.job ? getJobStatus(stage.job) : stage.status} />
+                  <div className="pipeline-stage-actions">
+                    <StatusBadge status={stage.job ? getJobStatus(stage.job) : stage.status} />
+                    {stage.job && jobId && canStopJob(stage.job) ? (
+                      <button
+                        className="button danger compact-button"
+                        type="button"
+                        disabled={stoppingJobIds.includes(jobId)}
+                        onClick={() => void handleStopStageJob(jobId)}
+                      >
+                        {stoppingJobIds.includes(jobId) ? "Stopping..." : "Stop"}
+                      </button>
+                    ) : null}
+                  </div>
                 </li>
               );
             })}
