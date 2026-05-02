@@ -141,6 +141,37 @@ export const catalogProducts = {
   filtered_total: 2,
 };
 
+export const catalogProductsEmptyImportWarning = {
+  items: [],
+  page: 1,
+  page_size: 100,
+  total: 0,
+  filtered_total: 0,
+  warning: "Active catalog is empty. Run python -m pricefetcher.jobs.ingest_catalog.",
+};
+
+export const catalogDbImportRequiredError = {
+  status: 503,
+  body: {
+    detail: "Catalog database/import required. Configure PostgreSQL, run migrations, and import sourceCata.csv.",
+    code: "catalog_database_import_required",
+    required_for: ["catalog"],
+    ready_for_catalog: false,
+    configured: true,
+    reachable: true,
+    required_tables_present: true,
+    alembic_up_to_date: true,
+    active_catalog_empty: true,
+    blocking_reasons: ["Active catalog is empty. Run python -m pricefetcher.jobs.ingest_catalog."],
+    non_catalog_workflows_available: true,
+    setup_hints: [
+      "Set PRICEFETCHER_DATABASE_URL.",
+      "Run alembic upgrade head.",
+      "Run python -m pricefetcher.jobs.ingest_catalog.",
+    ],
+  },
+};
+
 export const dbStatusAvailable = {
   configured: true,
   reachable: true,
@@ -584,6 +615,13 @@ export const commerceDbRequiredFixtureRoutes: MockRoute[] = [
     path: "/commerce-api/price-monitoring/alerts/evaluate/pm-run-001",
     response: commerceDbUnavailableError,
   },
+];
+
+export const catalogDbImportRequiredFixtureRoutes: MockRoute[] = [
+  { method: "GET", path: "/commerce-api/catalog/products", response: catalogDbImportRequiredError },
+  { method: "GET", path: "/commerce-api/catalog/summary", response: catalogDbImportRequiredError },
+  { method: "GET", path: "/commerce-api/catalog/brands", response: catalogDbImportRequiredError },
+  { method: "GET", path: "/commerce-api/catalog/category-hierarchy", response: catalogDbImportRequiredError },
 ];
 
 export const commerceFixtureRoutes: MockRoute[] = [

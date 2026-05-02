@@ -112,11 +112,17 @@ The browser always uses the `/commerce-api` proxy for commerce calls. Vite rewri
 requests to `/api` on the commerce backend, so `GET /commerce-api/health` reaches
 `GET http://127.0.0.1:8001/api/health`.
 
+Catalog browsing uses the commerce backend and reads from PostgreSQL. `sourceCata.csv` is an
+import input for the backend; it is not the runtime source for Catalog browsing. Catalog requires
+PostgreSQL, current migrations, and an imported active catalog.
+
 PostgreSQL is mandatory for Price Monitoring workflow actions, execution history, and alerts.
-The UI reads `GET /commerce-api/price-monitoring/db/status` and only enables those workflows when
+Price Monitoring also requires an active imported catalog. The UI reads
+`GET /commerce-api/price-monitoring/db/status` and only enables those workflows when
 `ready_for_price_monitoring` is `true`. A DB-not-ready response is treated as a Price Monitoring
-lock, not as a full commerce backend outage; Catalog, CSV/Bridge, files, paths, artifacts, and
-general health remain usable when their endpoints are running.
+lock, not as a full commerce backend outage; CSV/Bridge, files, paths, artifacts, and general
+health remain usable when their endpoints are running. Catalog has its own database/import
+required state when Catalog endpoints cannot read PostgreSQL or the active import.
 
 ## Windows 10 Setup
 
@@ -208,7 +214,7 @@ http://127.0.0.1:5173
 
 Required local files for the commerce workflows:
 
-- `C:\Users\user\Downloads\sourceCata.csv`
+- `C:\Users\user\Downloads\sourceCata.csv` as the Catalog import input
 - `C:\Exports\CheckWHouseBalance.csv` for bridge runs
 
 You can also run a terminal diagnostic check on Windows:
@@ -252,6 +258,10 @@ npm run preview
 - This is a UI-only repo. Backend job logic stays in the backend.
 - The Catalog tab can browse commerce catalog products and preview/create Price Monitoring
   selection runs.
+- Catalog uses the commerce backend, requires PostgreSQL and an imported active catalog, and shows
+  a Catalog database/import required state when that readiness fails.
+- `sourceCata.csv` is imported into PostgreSQL by the backend. It is not read live by the Catalog
+  page at browsing time.
 - Catalog and Price Monitoring use backend-native hierarchy filters from
   `/commerce-api/catalog/category-hierarchy`: Family, Category, and Sub-Category. The UI
   label is `Category`, while request payloads and query params use the backend field
@@ -266,8 +276,9 @@ npm run preview
   `productAgentUi.catalog.columns.v1`. Reset columns restores the default layout.
 - Manufacturer filters load from `/commerce-api/catalog/brands` and submit the exact manufacturer
   string selected in the dropdown.
-- If the category hierarchy endpoint fails or is unavailable, update and start the latest
-  `price-fetcher` backend.
+- If Catalog summary, products, brands, or hierarchy fail with database/import readiness errors,
+  configure `PRICEFETCHER_DATABASE_URL`, run `alembic upgrade head`, run
+  `python -m pricefetcher.jobs.ingest_catalog`, then reload the Catalog page.
 - The CSV/Bridge tab gets safe file roots from the commerce backend, opens CSV files through
   backend file APIs, and keeps edited CSV values as strings so values such as `005606` are
   preserved.
@@ -304,10 +315,11 @@ npm run preview
   refresh in the same session using `sessionStorage`. Per-page subtle reset actions clear saved
   state. Large server-backed results such as catalog rows, observation tables, review tables, CSV
   contents, and API responses are reloaded instead of permanently stored.
-- The Price Monitoring and Price Alerts pages show database status banners. PostgreSQL is required
-  for Price Monitoring preview, run creation, fetch, review, review actions, export, execution
-  history, and alert workflows. When DB readiness fails, those workflows are locked while Catalog,
-  CSV/Bridge, files, paths, artifacts, and general commerce backend health remain usable.
+- The Price Monitoring and Price Alerts pages show database status banners. PostgreSQL and an
+  active imported catalog are required for Price Monitoring preview, run creation, fetch, review,
+  review actions, export, execution history, and alert workflows. When Price Monitoring DB
+  readiness fails, those workflows are locked while CSV/Bridge, files, paths, artifacts, and
+  general commerce backend health remain usable when their endpoints are running.
 - BestPrice fetches can include an optional `catalog_url` hint, while the backend may also
   resolve products from MPN data.
 - Price Monitoring export is CSV only. The UI does not update OpenCart automatically.

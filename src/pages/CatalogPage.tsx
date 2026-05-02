@@ -4,6 +4,12 @@ import {
   commerceClient,
   getCommerceApiErrorMessage,
 } from "../api/commerceClient";
+import {
+  CATALOG_READINESS_REQUIRED_MESSAGE,
+  getCatalogReadinessBlock,
+  getCatalogReadinessWarning,
+} from "../api/catalogReadinessGate";
+import type { CatalogReadinessBlock } from "../api/catalogReadinessGate";
 import type {
   CatalogBrandOption,
   CatalogCategoryHierarchyResponse,
@@ -406,9 +412,53 @@ function CatalogSetupHint() {
       <strong>Catalog setup check</strong>
       <ul>
         <li>Commerce API must be running: <code>pricefetcher-api</code></li>
-        <li>Expected catalog file: <code>C:\Users\user\Downloads\sourceCata.csv</code></li>
+        <li>Database URL: <code>PRICEFETCHER_DATABASE_URL</code></li>
+        <li>Run migrations: <code>alembic upgrade head</code></li>
+        <li>Import catalog input: <code>python -m pricefetcher.jobs.ingest_catalog</code></li>
         <li>UI endpoint: <code>/commerce-api/catalog/summary</code></li>
         <li>Backend endpoint: <code>http://127.0.0.1:8001/api/catalog/summary</code></li>
+      </ul>
+    </div>
+  );
+}
+
+function CatalogReadinessBanner({
+  block,
+  onRetry,
+}: {
+  block: CatalogReadinessBlock;
+  onRetry?: () => void;
+}) {
+  return (
+    <div className="db-status-banner warning" role="alert">
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">Catalog</p>
+          <h3>Catalog database/import required</h3>
+        </div>
+        {onRetry ? (
+          <button className="button secondary" type="button" onClick={onRetry}>
+            Retry Catalog
+          </button>
+        ) : null}
+      </div>
+      <p>{block.message}</p>
+      <p className="muted">
+        Catalog browsing reads from PostgreSQL after sourceCata.csv has been imported. This does not
+        mean CSV/Bridge, files, paths, artifacts, or general commerce health are unavailable when
+        their endpoints are running.
+      </p>
+      {block.details.length > 0 ? (
+        <ul className="db-status-hints">
+          {block.details.map((detail) => (
+            <li key={detail}>{detail}</li>
+          ))}
+        </ul>
+      ) : null}
+      <ul className="db-status-hints">
+        {block.setupHints.map((hint) => (
+          <li key={hint}>{hint}</li>
+        ))}
       </ul>
     </div>
   );
@@ -425,12 +475,14 @@ export function CatalogPage() {
     });
   const [summary, setSummary] = useState<CatalogSummary | null>(null);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  const [summaryReadinessBlock, setSummaryReadinessBlock] = useState<CatalogReadinessBlock | null>(null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(true);
 
   const [categoryHierarchy, setCategoryHierarchy] =
     useState<CatalogCategoryHierarchyResponse | null>(null);
   const [brandOptions, setBrandOptions] = useState<CatalogBrandOption[]>([]);
   const [filtersError, setFiltersError] = useState<string | null>(null);
+  const [filtersReadinessBlock, setFiltersReadinessBlock] = useState<CatalogReadinessBlock | null>(null);
   const [areFiltersLoading, setAreFiltersLoading] = useState(true);
 
   const [productsResponse, setProductsResponse] = useState<CatalogProductsResponse>({
@@ -441,6 +493,8 @@ export function CatalogPage() {
     filtered_total: 0,
   });
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [productsReadinessBlock, setProductsReadinessBlock] = useState<CatalogReadinessBlock | null>(null);
+  const [productsWarningBlock, setProductsWarningBlock] = useState<CatalogReadinessBlock | null>(null);
   const [areProductsLoading, setAreProductsLoading] = useState(true);
 
   const [q, setQ] = useState(persistedState.q);
@@ -482,9 +536,12 @@ export function CatalogPage() {
 
       setSummary(nextSummary);
       setSummaryError(null);
+      setSummaryReadinessBlock(null);
     } catch (error) {
       if (!signal?.aborted) {
-        setSummaryError(getCommerceApiErrorMessage(error));
+        const readinessBlock = getCatalogReadinessBlock(error);
+        setSummaryReadinessBlock(readinessBlock);
+        setSummaryError(readinessBlock ? null : getCommerceApiErrorMessage(error));
       }
     } finally {
       if (!signal?.aborted) {
@@ -505,11 +562,15 @@ export function CatalogPage() {
     }
 
     const errors: string[] = [];
+    let readinessBlock: CatalogReadinessBlock | null = null;
     if (nextHierarchy.status === "fulfilled") {
       setCategoryHierarchy(nextHierarchy.value);
     } else {
       setCategoryHierarchy(null);
-      errors.push(getCategoryHierarchyErrorMessage(nextHierarchy.reason));
+      readinessBlock = readinessBlock ?? getCatalogReadinessBlock(nextHierarchy.reason);
+      if (!readinessBlock) {
+        errors.push(getCategoryHierarchyErrorMessage(nextHierarchy.reason));
+      }
     }
 
     if (nextBrands.status === "fulfilled") {
@@ -523,9 +584,13 @@ export function CatalogPage() {
       );
     } else {
       setBrandOptions([]);
-      errors.push(`Could not load manufacturers: ${getCommerceApiErrorMessage(nextBrands.reason)}`);
+      readinessBlock = readinessBlock ?? getCatalogReadinessBlock(nextBrands.reason);
+      if (!readinessBlock) {
+        errors.push(`Could not load manufacturers: ${getCommerceApiErrorMessage(nextBrands.reason)}`);
+      }
     }
 
+    setFiltersReadinessBlock(readinessBlock);
     setFiltersError(errors.length > 0 ? errors.join(" ") : null);
     setAreFiltersLoading(false);
   }, []);
@@ -604,9 +669,16 @@ export function CatalogPage() {
 
         setProductsResponse(nextProducts);
         setProductsError(null);
+        setProductsReadinessBlock(null);
+        setProductsWarningBlock(
+          nextProducts.items.length === 0 ? getCatalogReadinessWarning(nextProducts.warning) : null,
+        );
       } catch (error) {
         if (!signal?.aborted) {
-          setProductsError(getCommerceApiErrorMessage(error));
+          const readinessBlock = getCatalogReadinessBlock(error);
+          setProductsReadinessBlock(readinessBlock);
+          setProductsWarningBlock(null);
+          setProductsError(readinessBlock ? null : getCommerceApiErrorMessage(error));
         }
       } finally {
         if (!signal?.aborted) {
@@ -830,6 +902,9 @@ export function CatalogPage() {
     1,
     Math.ceil(productsResponse.filtered_total / productsResponse.page_size),
   );
+  const catalogReadinessBlock =
+    productsReadinessBlock ?? productsWarningBlock ?? summaryReadinessBlock ?? filtersReadinessBlock;
+  const isCatalogLocked = catalogReadinessBlock !== null;
 
   return (
     <div className="page-stack catalog-page">
@@ -841,6 +916,17 @@ export function CatalogPage() {
           Reset saved Catalog state
         </button>
       </section>
+
+      {catalogReadinessBlock ? (
+        <CatalogReadinessBanner
+          block={catalogReadinessBlock}
+          onRetry={() => {
+            void loadSummary();
+            void loadFilterOptions();
+            void loadProducts();
+          }}
+        />
+      ) : null}
 
       <section className="panel">
         <div className="section-heading">
@@ -859,7 +945,7 @@ export function CatalogPage() {
             <CatalogSetupHint />
           </>
         ) : null}
-        {!isSummaryLoading && !summaryError ? (
+        {!isSummaryLoading && !summaryError && !summaryReadinessBlock ? (
           <dl className="summary-grid catalog-summary-grid">
             <SummaryCard label="Total products" value={getSummaryNumber(summary, ["total_products", "total"])} />
             <SummaryCard label="Active products" value={getSummaryNumber(summary, ["active_products", "active"])} />
@@ -1075,7 +1161,7 @@ export function CatalogPage() {
               className="button secondary"
               type="button"
               onClick={() => void previewSelection()}
-              disabled={isPreviewLoading || isRunLoading}
+              disabled={isPreviewLoading || isRunLoading || isCatalogLocked}
             >
               {isPreviewLoading ? "Previewing..." : "Preview selection"}
             </button>
@@ -1083,7 +1169,7 @@ export function CatalogPage() {
               className="button primary"
               type="button"
               onClick={() => void createRun()}
-              disabled={isRunLoading || isPreviewLoading}
+              disabled={isRunLoading || isPreviewLoading || isCatalogLocked}
             >
               {isRunLoading ? "Creating..." : "Create price monitoring run"}
             </button>
@@ -1113,8 +1199,15 @@ export function CatalogPage() {
             <CatalogSetupHint />
           </>
         ) : null}
-        {!areProductsLoading && !productsError && productsResponse.items.length === 0 ? (
-          <EmptyState title="No products found" message="Try broadening the current filters." />
+        {!areProductsLoading && !productsError && !productsReadinessBlock && productsResponse.items.length === 0 ? (
+          <EmptyState
+            title={productsWarningBlock ? "Catalog database/import required" : "No products found"}
+            message={
+              productsWarningBlock
+                ? CATALOG_READINESS_REQUIRED_MESSAGE
+                : "Try broadening the current filters."
+            }
+          />
         ) : null}
         {!areProductsLoading && !productsError && productsResponse.items.length > 0 ? (
           <>

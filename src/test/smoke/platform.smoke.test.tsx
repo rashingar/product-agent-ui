@@ -5,6 +5,8 @@ import {
   initialPriceMonitoringWorkflowState,
 } from "../../api/priceMonitoringUtils";
 import {
+  catalogDbImportRequiredFixtureRoutes,
+  catalogProductsEmptyImportWarning,
   commerceDbRequiredFixtureRoutes,
   commerceFixtureRoutes,
   dbStatusUnavailable,
@@ -51,6 +53,38 @@ describe("platform mocked page smoke tests", () => {
     expect(screen.getByText("Αφυγραντήρες")).toBeInTheDocument();
   });
 
+  it("shows Catalog database/import-required state for structured Catalog 503 responses", async () => {
+    installMockFetch([...catalogDbImportRequiredFixtureRoutes, ...allRoutes]);
+
+    renderWithRouter("/catalog");
+
+    await expect(screen.findByRole("heading", { name: "Catalog database/import required" })).resolves.toBeInTheDocument();
+    expect(screen.getAllByText(/Catalog database\/import required/).length).toBeGreaterThan(0);
+    expect(screen.getByText("Run alembic upgrade head.")).toBeInTheDocument();
+    expect(screen.getByText("Run python -m pricefetcher.jobs.ingest_catalog.")).toBeInTheDocument();
+    expect(screen.getByText(/CSV\/Bridge, files, paths, artifacts, or general commerce health/)).toBeInTheDocument();
+    expect(screen.queryByText(/Commerce API unreachable/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Preview selection" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create price monitoring run" })).toBeDisabled();
+  });
+
+  it("shows Catalog import-required language for empty successful Catalog product warnings", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/catalog/products",
+        response: catalogProductsEmptyImportWarning,
+      },
+      ...allRoutes,
+    ]);
+
+    renderWithRouter("/catalog");
+
+    await expect(screen.findByRole("heading", { name: "Catalog database/import required" })).resolves.toBeInTheDocument();
+    expect(screen.getByText("Active catalog is empty or the catalog import is missing.")).toBeInTheDocument();
+    expect(screen.getByText("Run python -m pricefetcher.jobs.ingest_catalog.")).toBeInTheDocument();
+  });
+
   it("renders Price Monitoring workflow with DB status and run list", async () => {
     installMockFetch(allRoutes);
 
@@ -77,7 +111,7 @@ describe("platform mocked page smoke tests", () => {
 
     await expect(
       screen.findAllByText(
-        "PostgreSQL is required for Price Monitoring. Catalog, CSV/Bridge, files, and artifacts may still be available.",
+        "PostgreSQL is required for Price Monitoring. CSV/Bridge, files, paths, artifacts, and general commerce health may still be available.",
       ),
     ).resolves.not.toHaveLength(0);
     expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();

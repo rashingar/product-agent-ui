@@ -151,7 +151,7 @@ export async function checkCommerceApi(): Promise<DiagnosticResult[]> {
       requestUrl: summaryUrl,
       okMessage: "Commerce catalog summary responded.",
       errorSuggestion:
-        "Confirm sourceCata.csv exists at C:\\Users\\user\\Downloads\\sourceCata.csv or set PRICEFETCHER_SOURCE_CATA_PATH.",
+        "Check PostgreSQL configuration, run alembic upgrade head, and import sourceCata.csv with python -m pricefetcher.jobs.ingest_catalog.",
     }),
     checkEndpoint({
       service: "Commerce API file roots",
@@ -171,9 +171,9 @@ export async function checkCommerceApi(): Promise<DiagnosticResult[]> {
 
   if (healthResult.status === "ok" && summaryResult.status !== "ok") {
     summaryResult.message =
-      "Commerce API is running, but catalog loading failed. Check sourceCata.csv path or PRICEFETCHER_SOURCE_CATA_PATH.";
+      "Commerce API is running, but Catalog database/import readiness failed.";
     summaryResult.suggestedFix =
-      "Check sourceCata.csv path or PRICEFETCHER_SOURCE_CATA_PATH.";
+      "Check PRICEFETCHER_DATABASE_URL, run alembic upgrade head, then run python -m pricefetcher.jobs.ingest_catalog.";
   }
 
   return [healthResult, summaryResult, fileRootsResult, artifactRootsResult];

@@ -33,6 +33,7 @@ export interface CatalogProductsResponse {
   page_size: number;
   total: number;
   filtered_total: number;
+  warning?: string | null;
 }
 
 export interface CatalogProductsParams {

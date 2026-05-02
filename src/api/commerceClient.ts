@@ -266,12 +266,20 @@ function normalizeProductsResponse(payload: unknown): CatalogProductsResponse {
       page_size: 100,
       total: 0,
       filtered_total: 0,
+      warning: null,
     };
   }
 
   const items = Array.isArray(payload.items)
     ? payload.items.map(normalizeProduct).filter((item): item is CatalogProduct => item !== null)
     : [];
+  const warnings = normalizeStringArray(payload.warnings);
+  const warning =
+    typeof payload.warning === "string" && payload.warning.trim().length > 0
+      ? payload.warning
+      : warnings.length > 0
+        ? warnings.join(" ")
+        : null;
 
   return {
     items,
@@ -279,6 +287,7 @@ function normalizeProductsResponse(payload: unknown): CatalogProductsResponse {
     page_size: toNumber(payload.page_size, items.length || 100),
     total: toNumber(payload.total, items.length),
     filtered_total: toNumber(payload.filtered_total, items.length),
+    warning,
   };
 }
 
@@ -1128,11 +1137,13 @@ async function request<T>(path: string, options: CommerceRequestOptions = {}): P
       : "";
     const setupHint =
       response.status === 404 && path.startsWith("/catalog/")
-        ? " If the API is running, check that sourceCata.csv exists at C:\\Users\\user\\Downloads\\sourceCata.csv or set PRICEFETCHER_SOURCE_CATA_PATH."
+        ? " If the API is running, check PostgreSQL configuration, run alembic upgrade head, and import sourceCata.csv with python -m pricefetcher.jobs.ingest_catalog."
         : "";
     const dbHint =
       response.status === 503 && path.startsWith("/price-monitoring/")
-        ? " PostgreSQL is required for Price Monitoring; Catalog, CSV/Bridge, files, and artifacts may still be available."
+        ? " PostgreSQL is required for Price Monitoring; CSV/Bridge, files, paths, artifacts, and general commerce health may still be available."
+        : response.status === 503 && path.startsWith("/catalog/")
+          ? " Catalog database/import required. Configure PRICEFETCHER_DATABASE_URL, run alembic upgrade head, run python -m pricefetcher.jobs.ingest_catalog, then reload the Catalog page. CSV/Bridge, files, paths, artifacts, and general commerce health may still be available."
         : "";
     const message = `Commerce API ${response.status} at ${path}: ${backendMessage}${pathHint}${setupHint}${dbHint}`;
     throw new CommerceApiError(message, response.status, payload, path);

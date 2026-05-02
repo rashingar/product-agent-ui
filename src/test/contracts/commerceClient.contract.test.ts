@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { CommerceApiError, commerceClient } from "../../api/commerceClient";
 import {
+  catalogDbImportRequiredFixtureRoutes,
+  catalogProductsEmptyImportWarning,
   alertEvents,
   commerceDbUnavailableError,
   commerceDbRequiredFixtureRoutes,
@@ -241,6 +243,30 @@ describe("commerce API client contract fixtures", () => {
       status: 503,
       message: expect.stringContaining("PostgreSQL is required for Price Monitoring"),
     } satisfies Partial<CommerceApiError>);
+  });
+
+  it("adds Catalog-specific context for structured Catalog DB/import-required errors", async () => {
+    installMockFetch(catalogDbImportRequiredFixtureRoutes);
+
+    await expect(commerceClient.listCatalogProducts({ page: 1, page_size: 100 })).rejects.toMatchObject({
+      status: 503,
+      message: expect.stringContaining("Catalog database/import required"),
+    } satisfies Partial<CommerceApiError>);
+  });
+
+  it("preserves empty active Catalog import warnings on product responses", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/catalog/products",
+        response: catalogProductsEmptyImportWarning,
+      },
+    ]);
+
+    await expect(commerceClient.listCatalogProducts({ page: 1, page_size: 100 })).resolves.toMatchObject({
+      items: [],
+      warning: "Active catalog is empty. Run python -m pricefetcher.jobs.ingest_catalog.",
+    });
   });
 
   it("does not treat DB-not-ready as the commerce backend being fully down", async () => {

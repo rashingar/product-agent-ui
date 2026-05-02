@@ -40,8 +40,10 @@ where pricefetcher-api >nul 2>nul
 if not errorlevel 1 (
   echo Running: pricefetcher-api
   echo Health: http://127.0.0.1:8001/api/health
+  echo Catalog summary: http://127.0.0.1:8001/api/catalog/summary
   echo Price Monitoring DB status: http://127.0.0.1:8001/api/price-monitoring/db/status
-  echo NOTE: PostgreSQL is required for Price Monitoring actions, but not for backend startup.
+  echo NOTE: PostgreSQL is required for Catalog browsing and Price Monitoring workflows.
+  echo NOTE: PostgreSQL is not required for backend startup, health, CSV/Bridge, files, paths, or artifacts.
   echo.
   pricefetcher-api
   if errorlevel 1 (
@@ -68,6 +70,10 @@ if exist ".venv\Scripts\python.exe" (
 
 echo Falling back to: %PYTHON_EXE% -m pricefetcher.api.app
 echo Health: http://127.0.0.1:8001/api/health
+echo Catalog summary: http://127.0.0.1:8001/api/catalog/summary
+echo Price Monitoring DB status: http://127.0.0.1:8001/api/price-monitoring/db/status
+echo NOTE: PostgreSQL is required for Catalog browsing and Price Monitoring workflows.
+echo NOTE: PostgreSQL is not required for backend startup, health, CSV/Bridge, files, paths, or artifacts.
 echo.
 
 "%PYTHON_EXE%" -c "import pricefetcher.api.app" >nul 2>nul

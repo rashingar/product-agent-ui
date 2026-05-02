@@ -63,9 +63,15 @@ state that enables Price Monitoring workflows in the UI. Structured 503 fixtures
 preview, create run, fetch, review, export, alert rules, alert events, and alert evaluation
 routes; those errors indicate a Price Monitoring DB lock, not a full commerce backend outage.
 
-Catalog, CSV/Bridge, file, path, artifact, and general commerce health fixtures stay independent
-from Price Monitoring DB readiness. DB-not-ready fixtures set `non_db_workflows_available: true`
-to make that contract explicit.
+Catalog fixtures include separate structured 503 database/import-required responses for summary,
+brands, category hierarchy, and products. Those errors indicate a Catalog database/import lock,
+not a full commerce backend outage and not a Price Monitoring DB lock. An empty successful
+products fixture with an active-catalog-empty warning is also kept so the UI preserves import
+warnings without converting them into generic empty search results.
+
+CSV/Bridge, file, path, artifact, and general commerce health fixtures stay independent from
+Price Monitoring DB readiness and Catalog database/import readiness. Price Monitoring
+DB-not-ready fixtures set `non_db_workflows_available: true` to make that contract explicit.
 
 ## Updating Fixtures
 
@@ -73,7 +79,7 @@ When a backend contract intentionally changes, update the backend OpenAPI snapsh
 update the fixture payload, related client contract test, fixture/OpenAPI checker, and page smoke
 assertion. Keep payloads small but realistic, including representative Greek catalog/filter
 strings, leading-zero models, terminal and active statuses, Filters Manager revision tokens,
-DB-ready and DB-not-ready examples, structured Price Monitoring 503 errors, artifacts, and alert
-data.
+DB-ready and DB-not-ready examples, structured Price Monitoring 503 errors, structured Catalog
+database/import 503 errors, artifacts, and alert data.
 
 Later backend prompts will add OpenAPI snapshot export and snapshot checks in the backend repositories. Those checks should complement these UI fixtures rather than replace them.

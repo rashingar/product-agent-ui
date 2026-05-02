@@ -532,6 +532,59 @@ function assertCommerceDbRequiredErrorFixtures(routes) {
   });
 }
 
+function assertCatalogDbImportRequiredErrorFixtures(routes) {
+  const expectedCatalogPaths = new Set([
+    "/commerce-api/catalog/products",
+    "/commerce-api/catalog/summary",
+    "/commerce-api/catalog/brands",
+    "/commerce-api/catalog/category-hierarchy",
+  ]);
+  const coveredPaths = new Set();
+
+  routes.forEach((route) => {
+    const label = `commerce Catalog DB/import-required fixture ${routeKey(route)}`;
+    const pathValue = String(route.path ?? "");
+    coveredPaths.add(pathValue);
+    const response = getFixtureResponse(route);
+    if (!isRecord(response)) {
+      fail(`${label}: response is not an object.`);
+      return;
+    }
+
+    if (response.status !== 503) {
+      fail(`${label}: response status must be 503.`);
+    }
+
+    if (!isRecord(response.body)) {
+      fail(`${label}: response body is not an object.`);
+      return;
+    }
+
+    assertFields(label, response.body, [
+      "detail",
+      "required_for",
+      "ready_for_catalog",
+      "blocking_reasons",
+      "non_catalog_workflows_available",
+      "setup_hints",
+    ]);
+
+    if (response.body.ready_for_catalog !== false) {
+      fail(`${label}: ready_for_catalog must be false.`);
+    }
+
+    if (!Array.isArray(response.body.required_for) || !response.body.required_for.includes("catalog")) {
+      fail(`${label}: required_for must include catalog.`);
+    }
+  });
+
+  expectedCatalogPaths.forEach((pathValue) => {
+    if (!coveredPaths.has(pathValue)) {
+      fail(`commerce Catalog DB/import-required fixtures missing ${pathValue}.`);
+    }
+  });
+}
+
 const commerceOpenapi = readJson(SNAPSHOTS.commerce);
 const productAgentOpenapi = readJson(SNAPSHOTS.productAgent);
 
@@ -547,6 +600,10 @@ if (commerceOpenapi && productAgentOpenapi) {
   const commerceDbRequiredRoutes = await loadTsFixture(
     path.join(uiRoot, "src", "test", "fixtures", "commerceApi.ts"),
     "commerceDbRequiredFixtureRoutes",
+  );
+  const catalogDbImportRequiredRoutes = await loadTsFixture(
+    path.join(uiRoot, "src", "test", "fixtures", "commerceApi.ts"),
+    "catalogDbImportRequiredFixtureRoutes",
   );
 
   compareRoutes({
@@ -567,7 +624,14 @@ if (commerceOpenapi && productAgentOpenapi) {
     routes: commerceDbRequiredRoutes,
     critical: [],
   });
+  compareRoutes({
+    backend: "commerce",
+    openapi: commerceOpenapi,
+    routes: catalogDbImportRequiredRoutes,
+    critical: [],
+  });
   assertCommerceDbRequiredErrorFixtures(commerceDbRequiredRoutes);
+  assertCatalogDbImportRequiredErrorFixtures(catalogDbImportRequiredRoutes);
 }
 
 warnings.forEach((message) => console.warn(`WARN: ${message}`));

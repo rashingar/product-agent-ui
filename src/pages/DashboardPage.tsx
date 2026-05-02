@@ -162,8 +162,9 @@ export function DashboardPage() {
               <ul>
                 <li>Start commerce backend: <code>pricefetcher-api</code></li>
                 <li>Reinstall/update backend package: <code>python -m pip install -e .</code></li>
-                <li>Confirm catalog file exists: <code>C:\Users\user\Downloads\sourceCata.csv</code></li>
-                <li>Optional catalog override: <code>PRICEFETCHER_SOURCE_CATA_PATH</code></li>
+                <li>Configure Catalog database: <code>PRICEFETCHER_DATABASE_URL</code></li>
+                <li>Run Catalog migrations: <code>alembic upgrade head</code></li>
+                <li>Import catalog input: <code>python -m pricefetcher.jobs.ingest_catalog</code></li>
                 <li>Run UI through Vite: <code>npm run dev</code></li>
                 <li>Start local platform: <code>scripts\windows\start-all.cmd</code></li>
                 <li>Terminal diagnostics: <code>scripts\windows\diagnose.cmd</code></li>
