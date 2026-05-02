@@ -3,6 +3,16 @@
 Thin React + Vite + TypeScript operator dashboard for local Product-Agent and commerce
 backend APIs.
 
+## Local Platform Startup
+
+When this repo is checked out beside `price-fetcher` and `Product-Agent`, use the parent-level Windows scripts as the canonical local startup and diagnostics entrypoints:
+
+- `..\scripts\local\start-platform-windows.cmd`
+- `..\scripts\local\start-platform-foreground.cmd`
+- `..\scripts\local\diagnose-platform.cmd`
+
+The repo-local `scripts\windows\*.cmd` wrappers are kept for compatibility.
+
 ## Backend Contract
 
 The Product-Agent UI expects these local endpoints from the Product-Agent API:
