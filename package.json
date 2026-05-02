@@ -10,6 +10,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:fast": "vitest run src/test/contracts src/test/smoke",
+    "test:fixture-contracts": "node scripts/check-fixture-contracts.mjs",
     "test:contracts": "vitest run src/test/contracts",
     "test:smoke": "vitest run src/test/smoke"
   },

@@ -14,9 +14,15 @@ export const catalogSummary = {
   bestprice_products: 2,
   skroutz_products: 2,
   missing_mpn: 1,
+  manufacturer_count: 3,
 };
 
 export const catalogBrands = {
+  items: [
+    { manufacturer: "Midea", count: 1 },
+    { manufacturer: "Inventor", count: 1 },
+    { manufacturer: "ΓΕΡΜΑΝΟΣ", count: 1 },
+  ],
   manufacturers: [
     { manufacturer: "Midea", count: 1 },
     { manufacturer: "Inventor", count: 1 },
@@ -25,6 +31,36 @@ export const catalogBrands = {
 };
 
 export const catalogCategoryHierarchy = {
+  items: [
+    {
+      family: "Σπίτι",
+      count: 2,
+      categories: [
+        {
+          category_name: "Κλιματισμός",
+          count: 2,
+          sub_categories: [
+            {
+              sub_category: "Αφυγραντήρες",
+              count: 2,
+              raw_categories: ["Σπίτι > Κλιματισμός > Αφυγραντήρες"],
+            },
+          ],
+        },
+      ],
+    },
+    {
+      family: "Τεχνολογία",
+      count: 1,
+      categories: [
+        {
+          category_name: "Περιφερειακά",
+          count: 1,
+          sub_categories: [{ sub_category: "Πληκτρολόγια", count: 1 }],
+        },
+      ],
+    },
+  ],
   families: [
     {
       family: "Σπίτι",
@@ -87,6 +123,7 @@ export const catalogProducts = {
       family: "Τεχνολογία",
       category_name: "Περιφερειακά",
       sub_category: "Πληκτρολόγια",
+      raw_category: "Τεχνολογία > Περιφερειακά > Πληκτρολόγια",
       price: 39.9,
       quantity: 4,
       bestprice_status: 0,
@@ -107,6 +144,7 @@ export const catalogProducts = {
 export const dbStatusAvailable = {
   configured: true,
   reachable: true,
+  error: null,
   dialect: "postgresql",
   required_tables_present: true,
   alembic_up_to_date: true,
@@ -156,6 +194,7 @@ export const priceMonitoringExecutions = [
       can_download: true,
     },
     enriched_csv_path: "price-monitoring/pm-run-001/enriched.csv",
+    fetch_result_path: "price-monitoring/pm-run-001/fetch-result.json",
     log_path: "price-monitoring/pm-run-001/fetch.log",
     artifacts: [
       {
@@ -169,6 +208,8 @@ export const priceMonitoringExecutions = [
         warning: null,
       },
     ],
+    stale: false,
+    queue_position: null,
   },
   {
     run_id: "pm-run-001",
@@ -205,8 +246,7 @@ export const priceMonitoringExecutions = [
   },
 ];
 
-export const priceMonitoringRuns = {
-  runs: [
+export const priceMonitoringRunItems = [
     {
       run_id: "pm-run-001",
       status: "created",
@@ -231,7 +271,11 @@ export const priceMonitoringRuns = {
         queued_at: "2026-05-02T09:05:00Z",
       },
     },
-  ],
+  ];
+
+export const priceMonitoringRuns = {
+  items: priceMonitoringRunItems,
+  runs: priceMonitoringRunItems,
 };
 
 export const priceMonitoringRunDetail = {
@@ -242,11 +286,16 @@ export const priceMonitoringRunDetail = {
   skipped_count: 0,
   created_at: "2026-05-02T08:00:00Z",
   latest_fetch: priceMonitoringExecutions[1],
+  db: {
+    persisted: true,
+    reachable: true,
+  },
 };
 
 export const priceMonitoringFetchLogs = {
   run_id: "pm-run-001",
   execution_id: "exec-success",
+  lines: ["fetch started", "matched model 005606", "fetch completed"],
   logs: ["fetch started", "matched model 005606", "fetch completed"],
 };
 
@@ -431,7 +480,12 @@ export const commerceFixtureRoutes: MockRoute[] = [
   {
     method: "GET",
     path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch/executions",
-    response: { executions: priceMonitoringExecutions },
+    response: {
+      items: priceMonitoringExecutions,
+      executions: priceMonitoringExecutions,
+      count: priceMonitoringExecutions.length,
+      run_id: "pm-run-001",
+    },
   },
   {
     method: "GET",
