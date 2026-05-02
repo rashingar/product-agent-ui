@@ -48,8 +48,10 @@ if not errorlevel 1 (
     echo.
     echo ERROR: pricefetcher-api exited with an error.
     echo Setup hints:
-    echo   python -m pip install -e .
-    echo   python -m playwright install chromium
+    echo   python -m venv .venv
+    echo   .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+    echo   .venv\Scripts\python.exe -m pip install -e . --no-deps
+    echo   .venv\Scripts\python.exe -m playwright install chromium
     pause
     exit /b 1
   )
@@ -72,8 +74,10 @@ echo.
 if errorlevel 1 (
   echo ERROR: Could not import pricefetcher.api.app.
   echo Setup hints:
-  echo   python -m pip install -e .
-  echo   python -m playwright install chromium
+  echo   python -m venv .venv
+  echo   .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
+  echo   .venv\Scripts\python.exe -m pip install -e . --no-deps
+  echo   .venv\Scripts\python.exe -m playwright install chromium
   pause
   exit /b 1
 )

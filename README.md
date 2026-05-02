@@ -121,7 +121,7 @@ This repo works without WSL. From Command Prompt or PowerShell in this folder, r
 .\dev-windows.cmd
 ```
 
-`setup-windows.cmd` uses installed `node`/`npm` when they exist. If they are not on `PATH`, it downloads portable Node.js into `.tools` inside this repo and installs dependencies from there.
+`setup-windows.cmd` uses installed `node`/`npm` when they exist. If they are not on `PATH`, it downloads portable Node.js into `.tools` inside this repo and installs dependencies from `package-lock.json` with `npm ci`.
 
 `dev-windows.cmd` starts Vite at `http://127.0.0.1:5173`.
 
@@ -136,10 +136,12 @@ To run a production build on Windows:
 If Node.js and npm are already installed, these commands also work:
 
 ```powershell
-npm install
+npm ci
 Copy-Item .env.example .env
 npm run dev
 ```
+
+Use `npm install <package>` only when intentionally adding or changing dependencies, then commit both `package.json` and `package-lock.json`.
 
 ## Local Startup Checklist
 

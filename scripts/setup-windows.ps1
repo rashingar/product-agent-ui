@@ -64,7 +64,12 @@ Write-Host "npm version:"
 & $NpmPath --version
 
 Write-Host "Installing frontend dependencies ..."
-& $NpmPath install
+if (Test-Path (Join-Path $RepoRoot "package-lock.json")) {
+  & $NpmPath ci
+} else {
+  Write-Host "package-lock.json was not found; falling back to npm install."
+  & $NpmPath install
+}
 
 Write-Host ""
 Write-Host "Setup complete."

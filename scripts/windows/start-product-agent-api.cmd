@@ -55,7 +55,7 @@ if not exist "..\.venv\Scripts\python.exe" (
   echo ERROR: Missing Product-Agent virtual environment: Product-Agent\.venv
   echo Setup hints from the Product-Agent folder:
   echo   py -3.13 -m venv .venv
-  echo   .venv\Scripts\python.exe -m pip install -r requirements.txt
+  echo   .venv\Scripts\python.exe -m pip install -r requirements-lock.txt
   echo   .venv\Scripts\python.exe -m playwright install chromium
   pause
   exit /b 1

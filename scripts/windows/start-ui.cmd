@@ -31,16 +31,21 @@ if errorlevel 1 (
 if not exist "node_modules\" (
   echo ERROR: node_modules is missing.
   if "%RUN_INSTALL%"=="1" (
-    echo Running: npm install
-    call npm install
+    if exist "package-lock.json" (
+      echo Running: npm ci
+      call npm ci
+    ) else (
+      echo Running: npm install
+      call npm install
+    )
     if errorlevel 1 (
-      echo ERROR: npm install failed.
+      echo ERROR: UI dependency install failed.
       pause
       exit /b 1
     )
   ) else (
     echo Run:
-    echo   npm install
+    echo   npm ci
     echo Or allow this script to install dependencies:
     echo   scripts\windows\start-ui.cmd /install
     pause
