@@ -96,6 +96,7 @@ export const catalogCategoryHierarchy = {
 export const catalogProducts = {
   items: [
     {
+      catalog_product_id: 1,
       model: "005606",
       mpn: "MD-20L",
       name: "Midea Αφυγραντήρας 20L",
@@ -116,6 +117,7 @@ export const catalogProducts = {
       status: 1,
     },
     {
+      catalog_product_id: 2,
       model: "AB-123",
       mpn: null,
       name: "Σετ πληκτρολόγιο και ποντίκι",
@@ -139,6 +141,240 @@ export const catalogProducts = {
   page_size: 100,
   total: 2,
   filtered_total: 2,
+};
+
+export const sourceUrlSummary = {
+  total_count: 3,
+  active_count: 1,
+  needs_review_count: 1,
+  broken_count: 1,
+  disabled_count: 0,
+  redirected_count: 0,
+  manual_count: 2,
+  imported_count: 1,
+  discovered_count: 0,
+  products_with_urls_count: 1,
+  products_without_urls_count: 1,
+  coverage_percent: 50,
+  by_status: {
+    active: 1,
+    needs_review: 1,
+    broken: 1,
+    disabled: 0,
+    redirected: 0,
+  },
+  by_type: {
+    manual: 2,
+    imported: 1,
+    discovered: 0,
+  },
+  by_source: {
+    skroutz: 1,
+    bestprice: 1,
+    public: 1,
+  },
+};
+
+export const sourceUrlsForCatalogProduct = {
+  items: [
+    {
+      id: 101,
+      catalog_product_id: 1,
+      catalog_source: "sourceCata",
+      model: "005606",
+      mpn: "MD-20L",
+      manufacturer: "Midea",
+      source_name: "skroutz",
+      source_domain: "skroutz.gr",
+      url: "https://www.skroutz.gr/s/123/midea-md-20l.html",
+      url_normalized: "https://www.skroutz.gr/s/123/midea-md-20l.html",
+      status: "active",
+      url_type: "manual",
+      trust_level: "manual",
+      added_by: "operator",
+      notes: "Primary manual product URL.",
+      last_seen_at: "2026-05-02T08:00:00Z",
+      last_success_at: "2026-05-02T08:00:00Z",
+      last_failed_at: null,
+      failure_count: 0,
+      last_error: null,
+      created_at: "2026-05-02T08:00:00Z",
+      updated_at: "2026-05-02T08:00:00Z",
+    },
+    {
+      id: 102,
+      catalog_product_id: 1,
+      catalog_source: "sourceCata",
+      model: "005606",
+      mpn: "MD-20L",
+      manufacturer: "Midea",
+      source_name: "bestprice",
+      source_domain: "bestprice.gr",
+      url: "https://www.bestprice.gr/item/456/midea-md-20l.html",
+      url_normalized: "https://www.bestprice.gr/item/456/midea-md-20l.html",
+      status: "needs_review",
+      url_type: "imported",
+      trust_level: "medium",
+      added_by: "source-url-import",
+      notes: "Imported from enriched artifact; promote after review.",
+      last_seen_at: "2026-05-02T07:40:00Z",
+      last_success_at: null,
+      last_failed_at: null,
+      failure_count: 0,
+      last_error: null,
+      created_at: "2026-05-02T07:40:00Z",
+      updated_at: "2026-05-02T07:40:00Z",
+    },
+  ],
+  count: 2,
+};
+
+export const createdSourceUrl = {
+  id: 103,
+  catalog_product_id: 1,
+  catalog_source: "sourceCata",
+  model: "005606",
+  mpn: "MD-20L",
+  manufacturer: "Midea",
+  source_name: "public",
+  source_domain: "public.gr",
+  url: "https://www.public.gr/product/midea-md-20l",
+  url_normalized: "https://www.public.gr/product/midea-md-20l",
+  status: "active",
+  url_type: "manual",
+  trust_level: "manual",
+  added_by: "operator",
+  notes: null,
+  last_seen_at: null,
+  last_success_at: null,
+  last_failed_at: null,
+  failure_count: 0,
+  last_error: null,
+  created_at: "2026-05-02T09:00:00Z",
+  updated_at: "2026-05-02T09:00:00Z",
+};
+
+export const sourceUrlValidationSuccess = {
+  item: {
+    ...sourceUrlsForCatalogProduct.items[0],
+    status: "active",
+    last_success_at: "2026-05-02T09:10:00Z",
+    failure_count: 0,
+    last_error: null,
+  },
+  validation: {
+    status: "success",
+    message: "URL is reachable.",
+    http_status_code: 200,
+  },
+};
+
+export const sourceUrlValidationBroken = {
+  item: {
+    ...sourceUrlsForCatalogProduct.items[0],
+    status: "broken",
+    last_failed_at: "2026-05-02T09:15:00Z",
+    failure_count: 1,
+    last_error: "URL returned HTTP 404.",
+  },
+  validation: {
+    status: "failed",
+    message: "URL returned HTTP 404.",
+    http_status_code: 404,
+  },
+};
+
+export const sourceUrlImportPreview = {
+  apply: false,
+  candidates_found: 4,
+  imported_count: 2,
+  updated_count: 1,
+  skipped_count: 1,
+  active_count: 2,
+  needs_review_count: 1,
+  invalid_url_count: 0,
+  duplicate_count: 1,
+  unresolved_identity_count: 0,
+  ambiguous_identity_count: 1,
+  warnings: ["Ambiguous identity for artifact row model MIXED-001."],
+  sources_processed: ["observations", "artifacts"],
+  skipped_reasons: {
+    ambiguous_identity: 1,
+  },
+  changed_source_urls: [],
+  source_stats: {
+    observations: { candidates_found: 2 },
+    artifacts: { candidates_found: 2 },
+  },
+  candidate_evidence: [],
+  report_items: [
+    {
+      action: "created",
+      status: "active",
+      source_name: "skroutz",
+      source_domain: "skroutz.gr",
+      catalog_source: "sourceCata",
+      model: "005606",
+      mpn: "MD-20L",
+      url: "https://www.skroutz.gr/s/123/midea-md-20l.html",
+      evidence_source: "price_observations",
+      evidence_detail: "run pm-run-001 matched by model",
+      reason: null,
+      confidence: "high",
+      catalog_product_id: 1,
+      source_url_id: null,
+    },
+    {
+      action: "created",
+      status: "needs_review",
+      source_name: "bestprice",
+      source_domain: "bestprice.gr",
+      catalog_source: "sourceCata",
+      model: "005606",
+      mpn: "MD-20L",
+      url: "https://www.bestprice.gr/item/456/midea-md-20l.html",
+      evidence_source: "enriched_artifact",
+      evidence_detail: "legacy enriched CSV",
+      reason: null,
+      confidence: "medium",
+      catalog_product_id: 1,
+      source_url_id: null,
+    },
+    {
+      action: "skipped",
+      status: "needs_review",
+      source_name: "unknown",
+      source_domain: "example.test",
+      catalog_source: "sourceCata",
+      model: "MIXED-001",
+      mpn: null,
+      url: "https://example.test/mixed",
+      evidence_source: "legacy_run_folder",
+      evidence_detail: "legacy run output",
+      reason: "ambiguous_identity",
+      confidence: "low",
+      catalog_product_id: null,
+      source_url_id: null,
+    },
+  ],
+  report_truncated: false,
+};
+
+export const sourceUrlImportApply = {
+  ...sourceUrlImportPreview,
+  apply: true,
+  imported_count: 2,
+  updated_count: 1,
+  changed_source_urls: [
+    {
+      action: "created",
+      changed_fields: [],
+      source_url: {
+        ...sourceUrlsForCatalogProduct.items[1],
+        id: 104,
+      },
+    },
+  ],
 };
 
 export const catalogProductsEmptyImportWarning = {
@@ -532,6 +768,32 @@ function alertEventsResponse(request: MockRequest) {
   };
 }
 
+function createSourceUrlResponse(request: MockRequest) {
+  const body = typeof request.body === "object" && request.body !== null && !Array.isArray(request.body)
+    ? request.body as Record<string, unknown>
+    : {};
+  return {
+    ...createdSourceUrl,
+    url: typeof body.url === "string" && body.url.trim().length > 0 ? body.url : createdSourceUrl.url,
+    url_normalized:
+      typeof body.url === "string" && body.url.trim().length > 0 ? body.url.trim() : createdSourceUrl.url_normalized,
+    source_name: typeof body.source_name === "string" ? body.source_name : createdSourceUrl.source_name,
+    notes: typeof body.notes === "string" ? body.notes : createdSourceUrl.notes,
+  };
+}
+
+function updateSourceUrlResponse(request: MockRequest) {
+  const body = typeof request.body === "object" && request.body !== null && !Array.isArray(request.body)
+    ? request.body as Record<string, unknown>
+    : {};
+  return {
+    ...sourceUrlsForCatalogProduct.items[0],
+    status: typeof body.status === "string" ? body.status : sourceUrlsForCatalogProduct.items[0].status,
+    notes: typeof body.notes === "string" || body.notes === null ? body.notes : sourceUrlsForCatalogProduct.items[0].notes,
+    updated_at: "2026-05-02T09:20:00Z",
+  };
+}
+
 export const commerceDbUnavailableError = {
   status: 503,
   body: {
@@ -622,6 +884,13 @@ export const catalogDbImportRequiredFixtureRoutes: MockRoute[] = [
   { method: "GET", path: "/commerce-api/catalog/summary", response: catalogDbImportRequiredError },
   { method: "GET", path: "/commerce-api/catalog/brands", response: catalogDbImportRequiredError },
   { method: "GET", path: "/commerce-api/catalog/category-hierarchy", response: catalogDbImportRequiredError },
+  { method: "GET", path: "/commerce-api/catalog/products/1/source-urls", response: catalogDbImportRequiredError },
+  { method: "POST", path: "/commerce-api/catalog/products/1/source-urls", response: catalogDbImportRequiredError },
+  { method: "PATCH", path: "/commerce-api/catalog/source-urls/101", response: catalogDbImportRequiredError },
+  { method: "POST", path: "/commerce-api/catalog/source-urls/101/validate", response: catalogDbImportRequiredError },
+  { method: "GET", path: "/commerce-api/catalog/source-urls/summary", response: catalogDbImportRequiredError },
+  { method: "POST", path: "/commerce-api/catalog/source-urls/import/preview", response: catalogDbImportRequiredError },
+  { method: "POST", path: "/commerce-api/catalog/source-urls/import/apply", response: catalogDbImportRequiredError },
 ];
 
 export const commerceFixtureRoutes: MockRoute[] = [
@@ -630,6 +899,47 @@ export const commerceFixtureRoutes: MockRoute[] = [
   { method: "GET", path: "/commerce-api/catalog/brands", response: catalogBrands },
   { method: "GET", path: "/commerce-api/catalog/category-hierarchy", response: catalogCategoryHierarchy },
   { method: "GET", path: "/commerce-api/catalog/products", response: catalogProducts },
+  { method: "GET", path: "/commerce-api/catalog/products/1/source-urls", response: sourceUrlsForCatalogProduct },
+  {
+    method: "POST",
+    path: "/commerce-api/catalog/products/1/source-urls",
+    requestExample: { url: "https://www.public.gr/product/midea-md-20l", url_type: "manual" },
+    response: createSourceUrlResponse,
+  },
+  {
+    method: "PATCH",
+    path: "/commerce-api/catalog/source-urls/101",
+    requestExample: { status: "disabled" },
+    response: updateSourceUrlResponse,
+  },
+  { method: "POST", path: "/commerce-api/catalog/source-urls/101/validate", response: sourceUrlValidationBroken },
+  { method: "GET", path: "/commerce-api/catalog/source-urls/summary", response: sourceUrlSummary },
+  {
+    method: "POST",
+    path: "/commerce-api/catalog/source-urls/import/preview",
+    requestExample: {
+      catalog_source: "sourceCata",
+      include_observations: true,
+      include_artifacts: true,
+      include_legacy_runs: false,
+      limit: 100,
+      report_item_limit: 200,
+    },
+    response: sourceUrlImportPreview,
+  },
+  {
+    method: "POST",
+    path: "/commerce-api/catalog/source-urls/import/apply",
+    requestExample: {
+      catalog_source: "sourceCata",
+      include_observations: true,
+      include_artifacts: true,
+      include_legacy_runs: false,
+      limit: 100,
+      report_item_limit: 200,
+    },
+    response: sourceUrlImportApply,
+  },
   { method: "GET", path: "/commerce-api/price-monitoring/db/status", response: dbStatusAvailable },
   { method: "GET", path: "/commerce-api/price-monitoring/runs", response: priceMonitoringRuns },
   { method: "GET", path: "/commerce-api/price-monitoring/runs/pm-run-001", response: priceMonitoringRunDetail },

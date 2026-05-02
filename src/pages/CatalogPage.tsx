@@ -22,6 +22,10 @@ import type {
   PriceMonitoringSelectionResult,
   PriceMonitoringSource,
 } from "../api/commerceTypes";
+import {
+  CatalogSourceUrlManager,
+  SourceUrlImportPanel,
+} from "../components/CatalogSourceUrls";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
 import { usePersistentPageState } from "../hooks/usePersistentPageState";
 import {
@@ -512,6 +516,8 @@ export function CatalogPage() {
     () => new Set(normalizeVisibleColumnIds(persistedState.visibleColumnIds) ?? initialLayoutPreferences.visibleColumnIds),
   );
   const [selectedModels, setSelectedModels] = useState<Set<string>>(() => new Set());
+  const [sourceUrlProduct, setSourceUrlProduct] = useState<CatalogProduct | null>(null);
+  const [sourceUrlRefreshToken, setSourceUrlRefreshToken] = useState(0);
 
   const [previewResult, setPreviewResult] = useState<PriceMonitoringSelectionResult | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
@@ -850,6 +856,7 @@ export function CatalogPage() {
     setPageSize(initialCatalogPageState.pageSize);
     setVisibleColumnIds(new Set(initialCatalogPageState.visibleColumnIds));
     setSelectedModels(new Set());
+    setSourceUrlProduct(null);
     setPreviewResult(null);
     setRunResult(null);
   };
@@ -973,6 +980,13 @@ export function CatalogPage() {
           </dl>
         ) : null}
       </section>
+
+      <SourceUrlImportPanel
+        disabled={isCatalogLocked}
+        onApplied={() => {
+          setSourceUrlRefreshToken((value) => value + 1);
+        }}
+      />
 
       <section className="panel">
         <div className="section-heading">
@@ -1244,6 +1258,7 @@ export function CatalogPage() {
                     {isColumnVisible("category_levels") ? <th>Category levels</th> : null}
                     {isColumnVisible("raw_category") ? <th>Raw category</th> : null}
                     {isColumnVisible("warnings") ? <th>Warnings / eligibility</th> : null}
+                    <th>Source URLs</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1340,12 +1355,29 @@ export function CatalogPage() {
                             </div>
                           </td>
                         ) : null}
+                        <td>
+                          <button
+                            className="button secondary compact-button"
+                            type="button"
+                            onClick={() => setSourceUrlProduct(product)}
+                            disabled={isCatalogLocked}
+                            aria-label={`Source URLs for ${model}`}
+                          >
+                            Source URLs
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
             </div>
+
+            <CatalogSourceUrlManager
+              product={sourceUrlProduct}
+              disabled={isCatalogLocked}
+              refreshToken={sourceUrlRefreshToken}
+            />
 
             <div className="pagination-row">
               <button

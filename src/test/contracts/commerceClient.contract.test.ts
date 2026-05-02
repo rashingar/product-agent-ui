@@ -11,6 +11,11 @@ import {
   dbStatusNotConfigured,
   dbStatusUnavailable,
   priceMonitoringExecutions,
+  sourceUrlImportApply,
+  sourceUrlImportPreview,
+  sourceUrlSummary,
+  sourceUrlValidationSuccess,
+  sourceUrlsForCatalogProduct,
 } from "../fixtures/commerceApi";
 import { installMockFetch } from "../mockFetch";
 
@@ -25,6 +30,134 @@ describe("commerce API client contract fixtures", () => {
       family: "Σπίτι",
     });
     expect(typeof products.items[0].model).toBe("string");
+    expect(products.items[0].catalog_product_id).toBe(1);
+  });
+
+  it("lists creates updates and validates Catalog source URLs", async () => {
+    installMockFetch([
+      ...commerceFixtureRoutes,
+      {
+        method: "POST",
+        path: "/commerce-api/catalog/source-urls/102/validate",
+        response: sourceUrlValidationSuccess,
+      },
+    ]);
+
+    await expect(commerceClient.listCatalogProductSourceUrls(1)).resolves.toMatchObject({
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          id: 101,
+          catalog_product_id: 1,
+          url: sourceUrlsForCatalogProduct.items[0].url,
+          status: "active",
+          url_type: "manual",
+        }),
+        expect.objectContaining({
+          id: 102,
+          status: "needs_review",
+          url_type: "imported",
+        }),
+      ]),
+    });
+
+    await expect(
+      commerceClient.createCatalogProductSourceUrl(1, {
+        url: "https://www.public.gr/product/midea-md-20l",
+        url_type: "manual",
+      }),
+    ).resolves.toMatchObject({
+      catalog_product_id: 1,
+      status: "active",
+      url_type: "manual",
+    });
+
+    await expect(commerceClient.updateCatalogSourceUrl(101, { status: "disabled" })).resolves.toMatchObject({
+      id: 101,
+      status: "disabled",
+    });
+
+    await expect(commerceClient.validateCatalogSourceUrl(102)).resolves.toMatchObject({
+      item: expect.objectContaining({ status: "active" }),
+      validation: expect.objectContaining({ status: "success", http_status_code: 200 }),
+    });
+  });
+
+  it("loads source URL summary and import preview/apply reports", async () => {
+    installMockFetch(commerceFixtureRoutes);
+
+    await expect(commerceClient.getSourceUrlSummary()).resolves.toMatchObject({
+      total_count: sourceUrlSummary.total_count,
+      active_count: sourceUrlSummary.active_count,
+      needs_review_count: sourceUrlSummary.needs_review_count,
+      by_status: expect.objectContaining({ active: 1 }),
+    });
+
+    const body = {
+      catalog_source: "sourceCata",
+      include_observations: true,
+      include_artifacts: true,
+      include_legacy_runs: false,
+      report_item_limit: 200,
+    };
+
+    await expect(commerceClient.previewSourceUrlImport(body)).resolves.toMatchObject({
+      apply: false,
+      summary: expect.objectContaining({
+        candidates_found: sourceUrlImportPreview.candidates_found,
+        would_import_count: sourceUrlImportPreview.imported_count,
+      }),
+      report_items: expect.arrayContaining([
+        expect.objectContaining({ action: "created", status: "active", model: "005606" }),
+      ]),
+    });
+
+    await expect(commerceClient.applySourceUrlImport(body)).resolves.toMatchObject({
+      apply: true,
+      summary: expect.objectContaining({
+        imported_count: sourceUrlImportApply.imported_count,
+      }),
+      changed_source_urls: expect.arrayContaining([
+        expect.objectContaining({ action: "created" }),
+      ]),
+    });
+  });
+
+  it("normalizes malformed source URL payloads to stable empty shapes", async () => {
+    installMockFetch([
+      { method: "GET", path: "/commerce-api/catalog/products/1/source-urls", response: { items: [null, { nope: true }] } },
+      { method: "GET", path: "/commerce-api/catalog/source-urls/summary", response: null },
+      { method: "POST", path: "/commerce-api/catalog/source-urls/import/preview", response: { report_items: [null, "bad"] } },
+    ]);
+
+    await expect(commerceClient.listCatalogProductSourceUrls(1)).resolves.toMatchObject({
+      items: [],
+      count: 0,
+    });
+    await expect(commerceClient.getSourceUrlSummary()).resolves.toMatchObject({
+      total_count: 0,
+      active_count: 0,
+    });
+    await expect(commerceClient.previewSourceUrlImport({})).resolves.toMatchObject({
+      apply: false,
+      summary: expect.objectContaining({ candidates_found: 0, skipped_count: 0 }),
+      report_items: [],
+    });
+  });
+
+  it("keeps CommerceApiError path and message useful for source URL errors", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/catalog/products/1/source-urls",
+        response: { status: 500, body: { detail: "Source URL query failed." } },
+      },
+    ]);
+
+    await expect(commerceClient.listCatalogProductSourceUrls(1)).rejects.toMatchObject({
+      status: 500,
+      path: "/catalog/products/1/source-urls",
+      message: expect.stringContaining("Source URL query failed"),
+    } satisfies Partial<CommerceApiError>);
   });
 
   it("normalizes category hierarchy and brands", async () => {

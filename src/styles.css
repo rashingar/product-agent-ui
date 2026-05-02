@@ -779,7 +779,79 @@ textarea {
 }
 
 .catalog-table-wrap table {
-  min-width: 1320px;
+  min-width: 1420px;
+}
+
+.source-url-manager-panel,
+.source-url-import-report,
+.source-url-result-block {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.source-url-manager-panel {
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  padding-top: 18px;
+}
+
+.source-url-add-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+}
+
+.source-url-add-form .button {
+  flex: 0 0 auto;
+}
+
+.source-url-table-wrap table {
+  min-width: 1680px;
+}
+
+.source-url-import-table-wrap table {
+  min-width: 1380px;
+}
+
+.source-url-cell {
+  max-width: 360px;
+  overflow-wrap: anywhere;
+}
+
+.source-url-actions {
+  min-width: 360px;
+}
+
+.source-url-summary-grid,
+.source-url-import-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.source-url-import-controls label.checkbox-row {
+  align-items: center;
+  padding-top: 28px;
+}
+
+.source-url-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: fit-content;
+  font-weight: 700;
+}
+
+.source-url-confirm-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.source-url-warning-list {
+  display: grid;
+  gap: 4px;
+  margin: 8px 0 0;
+  padding-left: 20px;
 }
 
 table {
@@ -1302,6 +1374,8 @@ code {
   .quick-links,
   .summary-grid,
   .catalog-summary-grid,
+  .source-url-summary-grid,
+  .source-url-import-summary-grid,
   .csv-metadata-grid,
   .diagnostics-summary-grid,
   .alert-summary-grid,

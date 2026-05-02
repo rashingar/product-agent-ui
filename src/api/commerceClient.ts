@@ -56,6 +56,16 @@ import type {
   SaveCsvCopyBody,
   SaveCsvFileBody,
   SaveCsvResponse,
+  SourceUrl,
+  SourceUrlCreateBody,
+  SourceUrlImportRequest,
+  SourceUrlImportResponse,
+  SourceUrlImportCandidateReport,
+  SourceUrlImportSummary,
+  SourceUrlListResponse,
+  SourceUrlSummaryResponse,
+  SourceUrlUpdateBody,
+  SourceUrlValidationResponse,
   UpdateAlertRuleBody,
 } from "./commerceTypes";
 
@@ -288,6 +298,245 @@ function normalizeProductsResponse(payload: unknown): CatalogProductsResponse {
     total: toNumber(payload.total, items.length),
     filtered_total: toNumber(payload.filtered_total, items.length),
     warning,
+  };
+}
+
+function normalizeOptionalNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === "string" && value.trim().length > 0) {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  return null;
+}
+
+function normalizeCounter(value: unknown): number {
+  return normalizeOptionalNumber(value) ?? 0;
+}
+
+function normalizeSourceUrl(value: unknown): SourceUrl | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const url = normalizeNullableString(value.url ?? value.url_normalized);
+  if (!url || url.trim().length === 0) {
+    return null;
+  }
+
+  return {
+    ...value,
+    id: normalizeNullableId(value.id ?? value.source_url_id),
+    source_url_id: normalizeNullableId(value.source_url_id ?? value.id),
+    catalog_product_id: normalizeNullableId(value.catalog_product_id),
+    catalog_source: normalizeNullableString(value.catalog_source),
+    model: normalizeNullableString(value.model),
+    mpn: normalizeNullableString(value.mpn),
+    manufacturer: normalizeNullableString(value.manufacturer),
+    source_name: normalizeNullableString(value.source_name),
+    source_domain: normalizeNullableString(value.source_domain),
+    url,
+    url_normalized: normalizeNullableString(value.url_normalized),
+    status: normalizeNullableString(value.status) ?? "active",
+    url_type: normalizeNullableString(value.url_type) ?? "manual",
+    trust_level: normalizeNullableString(value.trust_level),
+    added_by: normalizeNullableString(value.added_by),
+    notes: normalizeNullableString(value.notes),
+    last_seen_at: normalizeNullableString(value.last_seen_at),
+    last_success_at: normalizeNullableString(value.last_success_at),
+    last_failed_at: normalizeNullableString(value.last_failed_at),
+    failure_count: normalizeOptionalNumber(value.failure_count),
+    last_error: normalizeNullableString(value.last_error),
+    created_at: normalizeNullableString(value.created_at),
+    updated_at: normalizeNullableString(value.updated_at),
+  };
+}
+
+function normalizeSourceUrlList(payload: unknown): SourceUrlListResponse {
+  const source = isRecord(payload) ? payload : {};
+  const items = getArrayPayload(payload, ["items", "source_urls", "data", "results"])
+    .map(normalizeSourceUrl)
+    .filter((item): item is SourceUrl => item !== null);
+
+  return {
+    ...source,
+    items,
+    count: normalizeOptionalNumber(source.count) ?? items.length,
+  };
+}
+
+function normalizeSourceUrlValidation(payload: unknown): SourceUrlValidationResponse {
+  const source = isRecord(payload) ? payload : {};
+  const item = normalizeSourceUrl(source.item ?? source.source_url ?? payload);
+  const validation = isRecord(source.validation)
+    ? source.validation
+    : isRecord(source.result)
+      ? source.result
+      : {};
+
+  return {
+    ...source,
+    item,
+    validation: {
+      ...validation,
+      status: normalizeNullableString(validation.status),
+      message: normalizeNullableString(validation.message),
+      http_status_code: normalizeOptionalNumber(validation.http_status_code),
+    },
+  };
+}
+
+function normalizeNumberRecord(value: unknown): Record<string, number> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Record<string, number>>((record, [key, entryValue]) => {
+    record[key] = normalizeCounter(entryValue);
+    return record;
+  }, {});
+}
+
+function normalizeSourceUrlSummary(payload: unknown): SourceUrlSummaryResponse {
+  const source = isRecord(payload) ? payload : {};
+  const statusCounters = normalizeNumberRecord(source.by_status);
+  const typeCounters = normalizeNumberRecord(source.by_type);
+
+  return {
+    ...source,
+    total_count: normalizeCounter(source.total_count ?? source.total ?? source.count),
+    active_count: normalizeCounter(source.active_count ?? statusCounters.active),
+    needs_review_count: normalizeCounter(source.needs_review_count ?? statusCounters.needs_review),
+    broken_count: normalizeCounter(source.broken_count ?? statusCounters.broken),
+    disabled_count: normalizeCounter(source.disabled_count ?? statusCounters.disabled),
+    redirected_count: normalizeCounter(source.redirected_count ?? statusCounters.redirected),
+    manual_count: normalizeCounter(source.manual_count ?? typeCounters.manual),
+    imported_count: normalizeCounter(source.imported_count ?? typeCounters.imported),
+    discovered_count: normalizeCounter(source.discovered_count ?? typeCounters.discovered),
+    products_with_urls_count: normalizeCounter(source.products_with_urls_count ?? source.products_with_urls),
+    products_without_urls_count: normalizeCounter(source.products_without_urls_count ?? source.products_without_urls),
+    coverage_percent: normalizeOptionalNumber(source.coverage_percent),
+    by_status: statusCounters,
+    by_type: typeCounters,
+    by_source: normalizeNumberRecord(source.by_source),
+  };
+}
+
+const SOURCE_URL_IMPORT_COUNTERS = [
+  "candidates_found",
+  "imported_count",
+  "updated_count",
+  "skipped_count",
+  "active_count",
+  "needs_review_count",
+  "invalid_url_count",
+  "duplicate_count",
+  "unresolved_identity_count",
+  "ambiguous_identity_count",
+] as const;
+
+function normalizeSourceUrlImportSummary(payload: unknown): SourceUrlImportSummary {
+  const source = isRecord(payload) ? payload : {};
+  const summary = SOURCE_URL_IMPORT_COUNTERS.reduce<SourceUrlImportSummary>(
+    (record, key) => {
+      record[key] = normalizeCounter(source[key]);
+      return record;
+    },
+    {
+      candidates_found: 0,
+      imported_count: 0,
+      updated_count: 0,
+      skipped_count: 0,
+      active_count: 0,
+      needs_review_count: 0,
+      invalid_url_count: 0,
+      duplicate_count: 0,
+      unresolved_identity_count: 0,
+      ambiguous_identity_count: 0,
+    },
+  );
+
+  const wouldImportCount = normalizeOptionalNumber(source.would_import_count);
+  const wouldUpdateCount = normalizeOptionalNumber(source.would_update_count);
+  if (wouldImportCount !== null) {
+    summary.would_import_count = wouldImportCount;
+  }
+  if (wouldUpdateCount !== null) {
+    summary.would_update_count = wouldUpdateCount;
+  }
+
+  return { ...source, ...summary };
+}
+
+function normalizeSourceStats(value: unknown): Record<string, Record<string, number>> {
+  if (!isRecord(value)) {
+    return {};
+  }
+
+  return Object.entries(value).reduce<Record<string, Record<string, number>>>((record, [key, stats]) => {
+    record[key] = normalizeNumberRecord(stats);
+    return record;
+  }, {});
+}
+
+function normalizeSourceUrlImportReportItem(value: unknown): SourceUrlImportCandidateReport | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    action: normalizeNullableString(value.action),
+    status: normalizeNullableString(value.status),
+    source_name: normalizeNullableString(value.source_name),
+    source_domain: normalizeNullableString(value.source_domain),
+    catalog_source: normalizeNullableString(value.catalog_source),
+    model: normalizeNullableString(value.model),
+    mpn: normalizeNullableString(value.mpn),
+    url: normalizeNullableString(value.url),
+    url_normalized: normalizeNullableString(value.url_normalized),
+    evidence_source: normalizeNullableString(value.evidence_source),
+    evidence_detail: normalizeNullableString(value.evidence_detail),
+    reason: normalizeNullableString(value.reason),
+    confidence: normalizeNullableString(value.confidence),
+    catalog_product_id: normalizeNullableId(value.catalog_product_id),
+    source_url_id: normalizeNullableId(value.source_url_id),
+  };
+}
+
+function normalizeSourceUrlImportResponse(payload: unknown): SourceUrlImportResponse {
+  const source = isRecord(payload) ? payload : {};
+  const rawSummary = isRecord(source.summary) ? source.summary : source;
+  const summary = normalizeSourceUrlImportSummary(rawSummary);
+  const reportItems = getArrayPayload(source.report_items ?? source.items, ["items", "data", "results"])
+    .map(normalizeSourceUrlImportReportItem)
+    .filter((item): item is SourceUrlImportCandidateReport => item !== null);
+  const apply = source.apply === true;
+
+  return {
+    ...source,
+    ...summary,
+    apply,
+    summary: {
+      ...summary,
+      would_import_count:
+        summary.would_import_count ?? (!apply ? summary.imported_count : undefined),
+      would_update_count:
+        summary.would_update_count ?? (!apply ? summary.updated_count : undefined),
+    },
+    sources_processed: normalizeStringArray(source.sources_processed),
+    warnings: normalizeStringArray(source.warnings),
+    skipped_reasons: normalizeNumberRecord(source.skipped_reasons),
+    changed_source_urls: Array.isArray(source.changed_source_urls) ? source.changed_source_urls : [],
+    source_stats: normalizeSourceStats(source.source_stats),
+    candidate_evidence: Array.isArray(source.candidate_evidence) ? source.candidate_evidence : [],
+    report_items: reportItems,
+    truncated: source.truncated === true,
+    report_truncated: source.report_truncated === true || source.truncated === true,
   };
 }
 
@@ -1312,6 +1561,111 @@ export const commerceClient = {
   async getCatalogSummary(signal?: AbortSignal): Promise<CatalogSummary> {
     const summary = await request<unknown>("/catalog/summary", { signal });
     return isRecord(summary) ? summary : {};
+  },
+
+  async listCatalogProductSourceUrls(
+    catalogProductId: string | number,
+    signal?: AbortSignal,
+  ): Promise<SourceUrlListResponse> {
+    return normalizeSourceUrlList(
+      await request<unknown>(
+        `/catalog/products/${encodeURIComponent(String(catalogProductId))}/source-urls`,
+        { signal },
+      ),
+    );
+  },
+
+  async createCatalogProductSourceUrl(
+    catalogProductId: string | number,
+    body: SourceUrlCreateBody,
+    signal?: AbortSignal,
+  ): Promise<SourceUrl> {
+    return (
+      normalizeSourceUrl(
+        await request<unknown>(
+          `/catalog/products/${encodeURIComponent(String(catalogProductId))}/source-urls`,
+          {
+            method: "POST",
+            body,
+            signal,
+          },
+        ),
+      ) ?? {
+        url: body.url,
+        status: "active",
+        url_type: body.url_type ?? "manual",
+      }
+    );
+  },
+
+  async updateCatalogSourceUrl(
+    sourceUrlId: string | number,
+    body: SourceUrlUpdateBody,
+    signal?: AbortSignal,
+  ): Promise<SourceUrl> {
+    return (
+      normalizeSourceUrl(
+        await request<unknown>(
+          `/catalog/source-urls/${encodeURIComponent(String(sourceUrlId))}`,
+          {
+            method: "PATCH",
+            body,
+            signal,
+          },
+        ),
+      ) ?? {
+        url: body.url ?? "",
+        status: body.status ?? "active",
+        url_type: "manual",
+      }
+    );
+  },
+
+  async validateCatalogSourceUrl(
+    sourceUrlId: string | number,
+    signal?: AbortSignal,
+  ): Promise<SourceUrlValidationResponse> {
+    return normalizeSourceUrlValidation(
+      await request<unknown>(
+        `/catalog/source-urls/${encodeURIComponent(String(sourceUrlId))}/validate`,
+        {
+          method: "POST",
+          signal,
+        },
+      ),
+    );
+  },
+
+  async getSourceUrlSummary(signal?: AbortSignal): Promise<SourceUrlSummaryResponse> {
+    return normalizeSourceUrlSummary(
+      await request<unknown>("/catalog/source-urls/summary", { signal }),
+    );
+  },
+
+  async previewSourceUrlImport(
+    body: SourceUrlImportRequest,
+    signal?: AbortSignal,
+  ): Promise<SourceUrlImportResponse> {
+    return normalizeSourceUrlImportResponse(
+      await request<unknown>("/catalog/source-urls/import/preview", {
+        method: "POST",
+        body,
+        signal,
+      }),
+    );
+  },
+
+  async applySourceUrlImport(
+    body: SourceUrlImportRequest,
+    signal?: AbortSignal,
+  ): Promise<SourceUrlImportResponse> {
+    return normalizeSourceUrlImportResponse(
+      await request<unknown>("/catalog/source-urls/import/apply", {
+        method: "POST",
+        body,
+        signal,
+      }),
+    );
   },
 
   async getArtifactRoots(signal?: AbortSignal): Promise<ArtifactRoot[]> {

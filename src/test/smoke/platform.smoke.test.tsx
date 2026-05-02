@@ -1,4 +1,4 @@
-import { screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import {
   PRICE_MONITORING_STATE_KEY,
@@ -51,6 +51,61 @@ describe("platform mocked page smoke tests", () => {
     await expect(screen.findByText("005606")).resolves.toBeInTheDocument();
     await expect(screen.findByText("Midea Αφυγραντήρας 20L")).resolves.toBeInTheDocument();
     expect(screen.getByText("Αφυγραντήρες")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Source URLs for 005606" })).toBeInTheDocument();
+    await expect(screen.findByText("Source URL Import")).resolves.toBeInTheDocument();
+    await expect(screen.findByText("Total URLs")).resolves.toBeInTheDocument();
+  });
+
+  it("opens Catalog source URL manager and supports add and validate flows", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Source URLs for 005606" }));
+
+    await expect(screen.findByRole("heading", { name: "Source URLs for 005606" })).resolves.toBeInTheDocument();
+    await expect(screen.findByText("https://www.skroutz.gr/s/123/midea-md-20l.html")).resolves.toBeInTheDocument();
+    expect(screen.getByText("needs review")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Manual URL"), {
+      target: { value: "https://www.public.gr/product/midea-md-20l" },
+    });
+    fireEvent.change(screen.getByLabelText("Source"), {
+      target: { value: "public" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Add URL" }));
+
+    await expect(screen.findByText("https://www.public.gr/product/midea-md-20l")).resolves.toBeInTheDocument();
+    expect(screen.getAllByText("active").length).toBeGreaterThan(0);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "Validate" })[1]);
+
+    await expect(screen.findAllByText("URL returned HTTP 404.")).resolves.not.toHaveLength(0);
+    await expect(screen.findAllByText("broken")).resolves.not.toHaveLength(0);
+  });
+
+  it("previews and applies source URL imports only after confirmation", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog");
+
+    await expect(screen.findByText("Source URL Import")).resolves.toBeInTheDocument();
+    const applyButton = screen.getByRole("button", { name: "Apply import" });
+    expect(applyButton).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview import" }));
+
+    await expect(screen.findByText("Dry-run report")).resolves.toBeInTheDocument();
+    await expect(screen.findByText("Ambiguous identity for artifact row model MIXED-001.")).resolves.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Apply import" })).toBeDisabled();
+
+    fireEvent.click(screen.getByLabelText("I reviewed the dry-run report"));
+
+    await waitFor(() => expect(screen.getByRole("button", { name: "Apply import" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "Apply import" }));
+
+    await expect(screen.findByText("Applied import report")).resolves.toBeInTheDocument();
+    expect(screen.getAllByText("Imported").length).toBeGreaterThan(0);
   });
 
   it("shows Catalog database/import-required state for structured Catalog 503 responses", async () => {
@@ -66,6 +121,9 @@ describe("platform mocked page smoke tests", () => {
     expect(screen.queryByText(/Commerce API unreachable/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview selection" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Create price monitoring run" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Preview import" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Apply import" })).toBeDisabled();
+    expect(screen.getByText("Source URL import is locked until Catalog database/import readiness is restored.")).toBeInTheDocument();
   });
 
   it("shows Catalog import-required language for empty successful Catalog product warnings", async () => {

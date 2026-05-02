@@ -258,6 +258,12 @@ npm run preview
 - This is a UI-only repo. Backend job logic stays in the backend.
 - The Catalog tab can browse commerce catalog products and preview/create Price Monitoring
   selection runs.
+- The Catalog tab also includes a Source URL Manager per catalog product. Products with
+  `catalog_product_id` can list, add, validate, disable/reactivate, and promote source URLs.
+  Imported `needs_review` URLs are visible but are not active monitoring inputs until promoted.
+- The Catalog Source URL Import panel supports coverage summary, dry-run preview, and guarded
+  apply. Apply is enabled only after a successful preview and the operator confirms the dry-run
+  report was reviewed.
 - Catalog uses the commerce backend, requires PostgreSQL and an imported active catalog, and shows
   a Catalog database/import required state when that readiness fails.
 - `sourceCata.csv` is imported into PostgreSQL by the backend. It is not read live by the Catalog
@@ -322,6 +328,8 @@ npm run preview
   general commerce backend health remain usable when their endpoints are running.
 - BestPrice fetches can include an optional `catalog_url` hint, while the backend may also
   resolve products from MPN data.
+- Stored source URLs prepare later workflows, but monitoring still does not use them as the
+  primary fetch path. Resolver modes and DB-first fetch execution are future backend work.
 - Price Monitoring export is CSV only. The UI does not update OpenCart automatically.
 - No authentication, websocket transport, batch upload, Redux, Zustand, or React Query is included.
 - Job detail and jobs list polling runs every 2.5 seconds while queued/running-like statuses are present, then stops once the backend reports a terminal status.

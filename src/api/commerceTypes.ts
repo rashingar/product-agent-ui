@@ -5,6 +5,7 @@ export type PriceMonitoringSource = "skroutz" | "bestprice";
 export type IgnoredFilter = "exclude" | "include";
 
 export interface CatalogProduct {
+  catalog_product_id?: number | string | null;
   model: string;
   mpn?: string | null;
   name?: string | null;
@@ -24,6 +25,158 @@ export interface CatalogProduct {
   automation_eligible?: boolean | null;
   ignored?: boolean | null;
   warnings?: string[] | null;
+  [key: string]: unknown;
+}
+
+export type SourceUrlStatus = "active" | "disabled" | "broken" | "redirected" | "needs_review";
+
+export type SourceUrlType = "manual" | "imported" | "discovered";
+
+export interface SourceUrl {
+  id?: number | string | null;
+  source_url_id?: number | string | null;
+  catalog_product_id?: number | string | null;
+  catalog_source?: string | null;
+  model?: string | null;
+  mpn?: string | null;
+  manufacturer?: string | null;
+  source_name?: string | null;
+  source_domain?: string | null;
+  url: string;
+  url_normalized?: string | null;
+  status: SourceUrlStatus | string;
+  url_type: SourceUrlType | string;
+  trust_level?: string | null;
+  added_by?: string | null;
+  notes?: string | null;
+  last_seen_at?: string | null;
+  last_success_at?: string | null;
+  last_failed_at?: string | null;
+  failure_count?: number | null;
+  last_error?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlCreateBody {
+  url: string;
+  source_name?: string | null;
+  url_type?: SourceUrlType | string | null;
+  trust_level?: string | null;
+  added_by?: string | null;
+  notes?: string | null;
+}
+
+export interface SourceUrlUpdateBody {
+  url?: string | null;
+  source_name?: string | null;
+  status?: SourceUrlStatus | string | null;
+  trust_level?: string | null;
+  notes?: string | null;
+}
+
+export interface SourceUrlValidationResponse {
+  item: SourceUrl | null;
+  validation: {
+    status?: string | null;
+    message?: string | null;
+    http_status_code?: number | null;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+export interface SourceUrlListResponse {
+  items: SourceUrl[];
+  count?: number;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlSummaryResponse {
+  total_count?: number;
+  active_count?: number;
+  needs_review_count?: number;
+  broken_count?: number;
+  disabled_count?: number;
+  redirected_count?: number;
+  manual_count?: number;
+  imported_count?: number;
+  discovered_count?: number;
+  products_with_urls_count?: number;
+  products_without_urls_count?: number;
+  coverage_percent?: number | null;
+  by_status?: Record<string, number>;
+  by_type?: Record<string, number>;
+  by_source?: Record<string, number>;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlImportRequest {
+  catalog_source?: string | null;
+  include_observations?: boolean;
+  include_artifacts?: boolean;
+  include_legacy_runs?: boolean;
+  legacy_runs_dir?: string | null;
+  limit?: number | null;
+  report_item_limit?: number | null;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlImportSummary {
+  candidates_found: number;
+  imported_count: number;
+  updated_count: number;
+  skipped_count: number;
+  active_count: number;
+  needs_review_count: number;
+  invalid_url_count: number;
+  duplicate_count: number;
+  unresolved_identity_count: number;
+  ambiguous_identity_count: number;
+  would_import_count?: number;
+  would_update_count?: number;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlImportCandidateReport {
+  action?: string | null;
+  status?: string | null;
+  source_name?: string | null;
+  source_domain?: string | null;
+  catalog_source?: string | null;
+  model?: string | null;
+  mpn?: string | null;
+  url?: string | null;
+  url_normalized?: string | null;
+  evidence_source?: string | null;
+  evidence_detail?: string | null;
+  reason?: string | null;
+  confidence?: string | null;
+  catalog_product_id?: number | string | null;
+  source_url_id?: number | string | null;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlImportResponse extends SourceUrlImportSummary {
+  apply: boolean;
+  summary: SourceUrlImportSummary;
+  sources_processed: string[];
+  warnings: string[];
+  skipped_reasons: Record<string, number>;
+  changed_source_urls: unknown[];
+  source_stats: Record<string, Record<string, number>>;
+  candidate_evidence: unknown[];
+  report_items: SourceUrlImportCandidateReport[];
+  truncated?: boolean;
+  report_truncated?: boolean;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlImportOptionsResponse {
+  catalog_sources: string[];
+  legacy_runs_dirs: string[];
+  default_catalog_source?: string | null;
   [key: string]: unknown;
 }
 
