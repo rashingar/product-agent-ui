@@ -9,6 +9,9 @@ Fixtures live in:
 
 The strict fetch helper in `src/test/mockFetch.ts` maps request method plus path to fixture responses and fails on any unexpected request. Fixture drift should be treated as a signal to intentionally update either the backend contract or the UI normalization layer.
 
+Backend OpenAPI snapshots remain canonical. The UI fixture checker normalizes `/commerce-api`
+fixture paths to backend `/api` paths before comparing route coverage.
+
 ## Product-Agent Endpoints
 
 - `GET /api/health`
@@ -54,8 +57,23 @@ for page tests; operators must reload the category before saving after that conf
 - `GET /commerce-api/price-monitoring/alerts/events`
 - `GET /commerce-api/artifacts/price-monitoring/runs/{run_id}`
 
+Price Monitoring fixtures include DB-ready, DB-not-configured, DB-unreachable, and
+missing-table/migration DB status payloads. `ready_for_price_monitoring: true` is the only
+state that enables Price Monitoring workflows in the UI. Structured 503 fixtures are kept for
+preview, create run, fetch, review, export, alert rules, alert events, and alert evaluation
+routes; those errors indicate a Price Monitoring DB lock, not a full commerce backend outage.
+
+Catalog, CSV/Bridge, file, path, artifact, and general commerce health fixtures stay independent
+from Price Monitoring DB readiness. DB-not-ready fixtures set `non_db_workflows_available: true`
+to make that contract explicit.
+
 ## Updating Fixtures
 
-When a backend contract intentionally changes, update the fixture payload first, then update the related client contract test and page smoke assertion. Keep payloads small but realistic, including representative Greek catalog/filter strings, leading-zero models, terminal and active statuses, Filters Manager revision tokens, DB unavailable examples, artifacts, and alert data.
+When a backend contract intentionally changes, update the backend OpenAPI snapshot first, then
+update the fixture payload, related client contract test, fixture/OpenAPI checker, and page smoke
+assertion. Keep payloads small but realistic, including representative Greek catalog/filter
+strings, leading-zero models, terminal and active statuses, Filters Manager revision tokens,
+DB-ready and DB-not-ready examples, structured Price Monitoring 503 errors, artifacts, and alert
+data.
 
 Later backend prompts will add OpenAPI snapshot export and snapshot checks in the backend repositories. Those checks should complement these UI fixtures rather than replace them.

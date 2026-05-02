@@ -1,4 +1,9 @@
 import type { PriceMonitoringDbStatus } from "../../api/commerceTypes";
+import {
+  getPriceMonitoringDbWarnings,
+  isPriceMonitoringDbReady,
+  PRICE_MONITORING_DB_REQUIRED_MESSAGE,
+} from "../../api/priceMonitoringDbGate";
 
 interface PriceMonitoringDbStatusBannerProps {
   status: PriceMonitoringDbStatus | null;
@@ -8,12 +13,7 @@ interface PriceMonitoringDbStatusBannerProps {
 }
 
 export function isPriceMonitoringDbAvailable(status: PriceMonitoringDbStatus | null): boolean {
-  return (
-    status?.configured === true &&
-    status.reachable === true &&
-    status.required_tables_present !== false &&
-    status.alembic_up_to_date !== false
-  );
+  return isPriceMonitoringDbReady(status);
 }
 
 function getStatusTone(status: PriceMonitoringDbStatus | null, error: string | null): string {
@@ -37,7 +37,7 @@ function getStatusLabel(status: PriceMonitoringDbStatus | null, error: string | 
     return "Database status unknown";
   }
 
-  return isPriceMonitoringDbAvailable(status) ? "Database available" : "Database unavailable";
+  return isPriceMonitoringDbAvailable(status) ? "Database ready" : "Database not ready";
 }
 
 function getSetupHints(status: PriceMonitoringDbStatus | null): string[] {
@@ -72,6 +72,7 @@ export function PriceMonitoringDbStatusBanner({
 }: PriceMonitoringDbStatusBannerProps) {
   const tone = getStatusTone(status, error);
   const hints = getSetupHints(status);
+  const warnings = getPriceMonitoringDbWarnings(status);
 
   return (
     <div className={`db-status-banner ${tone}`}>
@@ -110,9 +111,16 @@ export function PriceMonitoringDbStatusBanner({
 
       {error ? <p className="form-error">{error}</p> : null}
       {!error && !isPriceMonitoringDbAvailable(status) ? (
-        <p className="form-warning">
-          Database is unavailable. Read-only views may fail, and DB-backed write actions are disabled until PostgreSQL is configured, reachable, and migrated.
-        </p>
+        <div className="form-warning">
+          <p>{PRICE_MONITORING_DB_REQUIRED_MESSAGE}</p>
+          {warnings.length > 0 ? (
+            <ul>
+              {warnings.map((warning) => (
+                <li key={warning}>{warning}</li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
       ) : null}
       {status?.error ? <p className="muted">{status.error}</p> : null}
       {status?.alembic_current_revision || status?.alembic_head_revision ? (

@@ -241,6 +241,11 @@ export interface CancelPriceMonitoringFetchBody {
 export interface PriceMonitoringDbStatus {
   configured: boolean;
   reachable: boolean;
+  price_monitoring_requires_database?: boolean | null;
+  ready_for_price_monitoring?: boolean | null;
+  blocking_reasons?: string[] | null;
+  non_db_workflows_available?: boolean | null;
+  required_for?: string[] | null;
   dialect?: string | null;
   error?: string | null;
   required_tables_present?: boolean | null;

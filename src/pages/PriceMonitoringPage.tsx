@@ -46,6 +46,7 @@ import {
   isPriceMonitoringDbAvailable,
   PriceMonitoringDbStatusBanner,
 } from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
+import { getPriceMonitoringDbBlockingMessage } from "../api/priceMonitoringDbGate";
 import { usePersistentPageState } from "../hooks/usePersistentPageState";
 import {
   CATEGORY_HIERARCHY_UNAVAILABLE_MESSAGE,
@@ -646,7 +647,7 @@ function FetchResultBlock({
         </p>
       ) : null}
       {result.persistence_status === "not_configured" ? (
-        <p className="form-warning">DB persistence is disabled. Fetch completed, but observations were not stored.</p>
+        <p className="form-warning">PostgreSQL was not ready when this fetch result was produced, so observations were not stored.</p>
       ) : null}
       {result.was_refetch ? (
         <p className="muted">Refetch completed. Previous observations for this run were replaced.</p>
@@ -1157,7 +1158,13 @@ function StoredObservationsSection({
           <p className="eyebrow">Stored Observations</p>
           <h3>Stored Observations</h3>
         </div>
-        <button className="button secondary" type="button" disabled={isLoading} onClick={onRefresh}>
+        <button
+          className="button secondary"
+          type="button"
+          disabled={isLoading || !dbAvailable}
+          title={dbAvailable ? undefined : getPriceMonitoringDbBlockingMessage(dbStatus)}
+          onClick={onRefresh}
+        >
           {isLoading ? "Refreshing..." : "Refresh"}
         </button>
       </div>
@@ -1974,6 +1981,11 @@ export function PriceMonitoringPage() {
   );
 
   const previewSelection = async () => {
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setPreviewError(getPriceMonitoringDbBlockingMessage(dbStatus));
+      return;
+    }
+
     const hierarchyFilterSnapshot = selectedHierarchyFilters;
     setIsPreviewLoading(true);
     setPreviewError(null);
@@ -1991,6 +2003,11 @@ export function PriceMonitoringPage() {
   };
 
   const createRun = async () => {
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setCreateError(getPriceMonitoringDbBlockingMessage(dbStatus));
+      return;
+    }
+
     const hierarchyFilterSnapshot = selectedHierarchyFilters;
     setIsCreateLoading(true);
     setCreateError(null);
@@ -2075,6 +2092,11 @@ export function PriceMonitoringPage() {
       return;
     }
 
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setFetchError(getPriceMonitoringDbBlockingMessage(dbStatus));
+      return;
+    }
+
     setIsFetchLoading(true);
     setFetchError(null);
     setFetchResult(null);
@@ -2122,6 +2144,11 @@ export function PriceMonitoringPage() {
       return;
     }
 
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setFetchError(getPriceMonitoringDbBlockingMessage(dbStatus));
+      return;
+    }
+
     const confirmed = window.confirm(
       `Cancel fetch for run ${runId}? This marks the fetch execution as cancelled. Active in-process work may finish in the background.`,
     );
@@ -2162,6 +2189,11 @@ export function PriceMonitoringPage() {
     const runId = currentRunId.trim();
     if (!runId) {
       setReviewError("Enter or create a run ID first.");
+      return;
+    }
+
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setReviewError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -2331,6 +2363,9 @@ export function PriceMonitoringPage() {
 
   const isFetchActive = isActiveFetchStatus(fetchResult?.status);
   const isReviewBlockedByFetch = isFetchActive;
+  const dbAvailable = isPriceMonitoringDbAvailable(dbStatus);
+  const dbBlockingMessage = getPriceMonitoringDbBlockingMessage(dbStatus);
+  const dbActionTitle = dbAvailable ? undefined : dbBlockingMessage;
   const fetchButtonLabel = isFetchLoading
     ? "Starting fetch..."
     : isFetchActive
@@ -2341,6 +2376,11 @@ export function PriceMonitoringPage() {
     const runId = currentRunId.trim();
     if (!runId) {
       setApplyError("Enter or create a run ID first.");
+      return;
+    }
+
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setApplyError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -2384,6 +2424,11 @@ export function PriceMonitoringPage() {
     const runId = currentRunId.trim();
     if (!runId) {
       setExportError("Enter or create a run ID first.");
+      return;
+    }
+
+    if (!isPriceMonitoringDbAvailable(dbStatus)) {
+      setExportError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -2632,7 +2677,8 @@ export function PriceMonitoringPage() {
           <button
             className="button secondary"
             type="button"
-            disabled={isPreviewLoading || isCreateLoading}
+            disabled={isPreviewLoading || isCreateLoading || !dbAvailable}
+            title={dbActionTitle}
             onClick={() => void previewSelection()}
           >
             {isPreviewLoading ? "Previewing..." : "Preview"}
@@ -2640,7 +2686,8 @@ export function PriceMonitoringPage() {
           <button
             className="button primary"
             type="button"
-            disabled={isCreateLoading || isPreviewLoading}
+            disabled={isCreateLoading || isPreviewLoading || !dbAvailable}
+            title={dbActionTitle}
             onClick={() => void createRun()}
           >
             {isCreateLoading ? "Creating..." : "Create run"}
@@ -2812,7 +2859,8 @@ export function PriceMonitoringPage() {
           <button
             className="button primary"
             type="button"
-            disabled={isFetchLoading || isFetchActive}
+            disabled={isFetchLoading || isFetchActive || !dbAvailable}
+            title={dbActionTitle}
             onClick={() => void fetchPrices()}
           >
             {fetchButtonLabel}
@@ -2821,7 +2869,8 @@ export function PriceMonitoringPage() {
             <button
               className="button danger"
               type="button"
-              disabled={isCancelFetchLoading}
+              disabled={isCancelFetchLoading || !dbAvailable}
+              title={dbActionTitle}
               onClick={() => void cancelFetch()}
             >
               {isCancelFetchLoading ? "Cancelling..." : "Cancel fetch"}
@@ -2886,8 +2935,8 @@ export function PriceMonitoringPage() {
               className="button secondary"
               type="button"
               onClick={applyRecommendedActions}
-              disabled={!review || isReviewBlockedByFetch}
-              title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
+              disabled={!review || isReviewBlockedByFetch || !dbAvailable}
+              title={isReviewBlockedByFetch ? "Fetch is queued or running." : dbActionTitle}
             >
               Apply recommended actions
             </button>
@@ -2909,8 +2958,8 @@ export function PriceMonitoringPage() {
           <button
             className="button primary"
             type="button"
-            disabled={isReviewLoading || isReviewBlockedByFetch}
-            title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
+            disabled={isReviewLoading || isReviewBlockedByFetch || !dbAvailable}
+            title={isReviewBlockedByFetch ? "Fetch is queued or running." : dbActionTitle}
             onClick={() => void loadReview()}
           >
             {isReviewLoading ? "Loading review..." : "Load review"}
@@ -2987,6 +3036,7 @@ export function PriceMonitoringPage() {
                           <td>
                             <select
                               value={state.selected_action}
+                              disabled={!dbAvailable}
                               onChange={(event) =>
                                 updateRowAction(item.model, {
                                   selected_action: event.target.value as "" | PriceMonitoringAction,
@@ -3007,7 +3057,7 @@ export function PriceMonitoringPage() {
                               min="0"
                               step="0.01"
                               value={state.undercut_amount}
-                              disabled={state.selected_action !== "undercut"}
+                              disabled={state.selected_action !== "undercut" || !dbAvailable}
                               onChange={(event) =>
                                 updateRowAction(item.model, { undercut_amount: event.target.value })
                               }
@@ -3018,7 +3068,7 @@ export function PriceMonitoringPage() {
                             <input
                               className="table-input"
                               value={state.reason}
-                              disabled={state.selected_action !== "ignore"}
+                              disabled={state.selected_action !== "ignore" || !dbAvailable}
                               onChange={(event) => updateRowAction(item.model, { reason: event.target.value })}
                               placeholder="Optional"
                             />
@@ -3047,8 +3097,8 @@ export function PriceMonitoringPage() {
             <button
               className="button primary inline-button"
               type="button"
-              disabled={isApplyLoading || isReviewBlockedByFetch}
-              title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
+              disabled={isApplyLoading || isReviewBlockedByFetch || !dbAvailable}
+              title={isReviewBlockedByFetch ? "Fetch is queued or running." : dbActionTitle}
               onClick={() => void applyActions()}
             >
               {isApplyLoading ? "Applying actions..." : "Apply actions"}
@@ -3153,8 +3203,8 @@ export function PriceMonitoringPage() {
         <button
           className="button primary inline-button"
           type="button"
-          disabled={isExportLoading || isReviewBlockedByFetch}
-          title={isReviewBlockedByFetch ? "Fetch is queued or running." : undefined}
+          disabled={isExportLoading || isReviewBlockedByFetch || !dbAvailable}
+          title={isReviewBlockedByFetch ? "Fetch is queued or running." : dbActionTitle}
           onClick={() => void exportPriceUpdate()}
         >
           {isExportLoading ? "Exporting..." : "Export OpenCart price update CSV"}

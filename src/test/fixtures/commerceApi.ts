@@ -144,6 +144,11 @@ export const catalogProducts = {
 export const dbStatusAvailable = {
   configured: true,
   reachable: true,
+  price_monitoring_requires_database: true,
+  ready_for_price_monitoring: true,
+  blocking_reasons: [],
+  non_db_workflows_available: true,
+  required_for: ["price-monitoring", "price-monitoring-alerts", "price-monitoring-history"],
   error: null,
   dialect: "postgresql",
   required_tables_present: true,
@@ -153,14 +158,51 @@ export const dbStatusAvailable = {
   setup_hints: [],
 };
 
+export const dbStatusNotConfigured = {
+  configured: false,
+  reachable: false,
+  price_monitoring_requires_database: true,
+  ready_for_price_monitoring: false,
+  blocking_reasons: ["PRICEFETCHER_DATABASE_URL is not configured."],
+  non_db_workflows_available: true,
+  required_for: ["price-monitoring", "price-monitoring-alerts", "price-monitoring-history"],
+  dialect: null,
+  error: "database URL is not configured",
+  required_tables_present: null,
+  alembic_up_to_date: null,
+  setup_hints: ["Set PRICEFETCHER_DATABASE_URL.", "Run alembic upgrade head.", "Restart pricefetcher-api."],
+};
+
 export const dbStatusUnavailable = {
   configured: true,
   reachable: false,
+  price_monitoring_requires_database: true,
+  ready_for_price_monitoring: false,
+  blocking_reasons: ["PostgreSQL is configured but not reachable."],
+  non_db_workflows_available: true,
+  required_for: ["price-monitoring", "price-monitoring-alerts", "price-monitoring-history"],
   dialect: "postgresql",
   error: "connection refused",
   required_tables_present: null,
   alembic_up_to_date: null,
-  setup_hints: ["Start PostgreSQL or disable persistence for local smoke tests."],
+  setup_hints: ["Start PostgreSQL.", "Run alembic upgrade head."],
+};
+
+export const dbStatusMigrationMissing = {
+  configured: true,
+  reachable: true,
+  price_monitoring_requires_database: true,
+  ready_for_price_monitoring: false,
+  blocking_reasons: ["Required Price Monitoring tables are missing.", "Alembic migrations are not up to date."],
+  non_db_workflows_available: true,
+  required_for: ["price-monitoring", "price-monitoring-alerts", "price-monitoring-history"],
+  dialect: "postgresql",
+  error: null,
+  required_tables_present: false,
+  alembic_up_to_date: false,
+  alembic_current_revision: "202604010001",
+  alembic_head_revision: "202605020001",
+  setup_hints: ["Run alembic upgrade head."],
 };
 
 export const priceMonitoringExecutions = [
@@ -462,10 +504,87 @@ function alertEventsResponse(request: MockRequest) {
 export const commerceDbUnavailableError = {
   status: 503,
   body: {
-    detail: "Price monitoring database is unavailable.",
+    detail: "PostgreSQL is required for Price Monitoring.",
     status: dbStatusUnavailable,
+    ready_for_price_monitoring: false,
+    blocking_reasons: dbStatusUnavailable.blocking_reasons,
+    non_db_workflows_available: true,
   },
 };
+
+export const commerceDbRequiredFixtureRoutes: MockRoute[] = [
+  { method: "POST", path: "/commerce-api/price-monitoring/selection/preview", response: commerceDbUnavailableError },
+  { method: "POST", path: "/commerce-api/price-monitoring/runs", response: commerceDbUnavailableError },
+  { method: "GET", path: "/commerce-api/price-monitoring/runs", response: commerceDbUnavailableError },
+  { method: "GET", path: "/commerce-api/price-monitoring/runs/pm-run-001", response: commerceDbUnavailableError },
+  { method: "POST", path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch", response: commerceDbUnavailableError },
+  { method: "GET", path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch", response: commerceDbUnavailableError },
+  {
+    method: "GET",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch/executions",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "GET",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch/logs",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "GET",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch/exec-success",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "GET",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch/exec-success/logs",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch/cancel",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch/exec-success/cancel",
+    response: commerceDbUnavailableError,
+  },
+  { method: "GET", path: "/commerce-api/price-monitoring/runs/pm-run-001/review", response: commerceDbUnavailableError },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/review/actions",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/runs/pm-run-001/export-price-update",
+    response: commerceDbUnavailableError,
+  },
+  { method: "GET", path: "/commerce-api/price-monitoring/alerts/rules", response: commerceDbUnavailableError },
+  { method: "POST", path: "/commerce-api/price-monitoring/alerts/rules", response: commerceDbUnavailableError },
+  { method: "PATCH", path: "/commerce-api/price-monitoring/alerts/rules/101", response: commerceDbUnavailableError },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/alerts/rules/101/deactivate",
+    response: commerceDbUnavailableError,
+  },
+  { method: "GET", path: "/commerce-api/price-monitoring/alerts/events", response: commerceDbUnavailableError },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/alerts/events/201/acknowledge",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/alerts/events/201/resolve",
+    response: commerceDbUnavailableError,
+  },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/alerts/evaluate/pm-run-001",
+    response: commerceDbUnavailableError,
+  },
+];
 
 export const commerceFixtureRoutes: MockRoute[] = [
   { method: "GET", path: "/commerce-api/health", response: commerceHealth },

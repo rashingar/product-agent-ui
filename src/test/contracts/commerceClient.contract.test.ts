@@ -3,7 +3,10 @@ import { CommerceApiError, commerceClient } from "../../api/commerceClient";
 import {
   alertEvents,
   commerceDbUnavailableError,
+  commerceDbRequiredFixtureRoutes,
   commerceFixtureRoutes,
+  dbStatusMigrationMissing,
+  dbStatusNotConfigured,
   dbStatusUnavailable,
   priceMonitoringExecutions,
 } from "../fixtures/commerceApi";
@@ -50,14 +53,38 @@ describe("commerce API client contract fixtures", () => {
     );
   });
 
-  it("normalizes DB status for reachable and unavailable states", async () => {
+  it("normalizes DB-ready status to ready for Price Monitoring", async () => {
     installMockFetch(commerceFixtureRoutes);
     await expect(commerceClient.getPriceMonitoringDbStatus()).resolves.toMatchObject({
       configured: true,
       reachable: true,
+      ready_for_price_monitoring: true,
+      price_monitoring_requires_database: true,
+      non_db_workflows_available: true,
       dialect: "postgresql",
     });
+  });
 
+  it("normalizes DB-not-configured status to not ready for Price Monitoring", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: dbStatusNotConfigured,
+      },
+    ]);
+
+    await expect(commerceClient.getPriceMonitoringDbStatus()).resolves.toMatchObject({
+      configured: false,
+      reachable: false,
+      ready_for_price_monitoring: false,
+      price_monitoring_requires_database: true,
+      non_db_workflows_available: true,
+      blocking_reasons: expect.arrayContaining(["PRICEFETCHER_DATABASE_URL is not configured."]),
+    });
+  });
+
+  it("normalizes DB-unreachable status to not ready for Price Monitoring", async () => {
     installMockFetch([
       {
         method: "GET",
@@ -65,10 +92,68 @@ describe("commerce API client contract fixtures", () => {
         response: dbStatusUnavailable,
       },
     ]);
+
     await expect(commerceClient.getPriceMonitoringDbStatus()).resolves.toMatchObject({
       configured: true,
       reachable: false,
+      ready_for_price_monitoring: false,
       error: "connection refused",
+    });
+  });
+
+  it("normalizes missing migration/table status to not ready for Price Monitoring", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: dbStatusMigrationMissing,
+      },
+    ]);
+
+    await expect(commerceClient.getPriceMonitoringDbStatus()).resolves.toMatchObject({
+      configured: true,
+      reachable: true,
+      required_tables_present: false,
+      alembic_up_to_date: false,
+      ready_for_price_monitoring: false,
+    });
+  });
+
+  it("infers old-backend DB status conservatively when ready field is absent", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: {
+          configured: true,
+          reachable: true,
+          error: null,
+          required_tables_present: true,
+          alembic_up_to_date: true,
+        },
+      },
+    ]);
+
+    await expect(commerceClient.getPriceMonitoringDbStatus()).resolves.toMatchObject({
+      ready_for_price_monitoring: true,
+      price_monitoring_requires_database: true,
+    });
+
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: {
+          configured: true,
+          reachable: true,
+          error: null,
+          required_tables_present: false,
+        },
+      },
+    ]);
+
+    await expect(commerceClient.getPriceMonitoringDbStatus()).resolves.toMatchObject({
+      ready_for_price_monitoring: false,
     });
   });
 
@@ -147,8 +232,21 @@ describe("commerce API client contract fixtures", () => {
     });
   });
 
-  it("adds useful context for 503 DB-unavailable errors", async () => {
+  it("adds useful context for structured 503 DB-required errors", async () => {
     installMockFetch([
+      ...commerceDbRequiredFixtureRoutes,
+    ]);
+
+    await expect(commerceClient.previewPriceMonitoringSelection({ source: "skroutz" })).rejects.toMatchObject({
+      status: 503,
+      message: expect.stringContaining("PostgreSQL is required for Price Monitoring"),
+    } satisfies Partial<CommerceApiError>);
+  });
+
+  it("does not treat DB-not-ready as the commerce backend being fully down", async () => {
+    installMockFetch([
+      { method: "GET", path: "/commerce-api/health", response: { status: "ok", service: "price-fetcher" } },
+      { method: "GET", path: "/commerce-api/price-monitoring/db/status", response: dbStatusUnavailable },
       {
         method: "GET",
         path: "/commerce-api/price-monitoring/runs",
@@ -156,9 +254,13 @@ describe("commerce API client contract fixtures", () => {
       },
     ]);
 
+    await expect(commerceClient.getCommerceHealth()).resolves.toMatchObject({ status: "ok" });
+    await expect(commerceClient.getPriceMonitoringDbStatus()).resolves.toMatchObject({
+      ready_for_price_monitoring: false,
+      non_db_workflows_available: true,
+    });
     await expect(commerceClient.listPriceMonitoringRuns()).rejects.toMatchObject({
       status: 503,
-      message: expect.stringContaining("DB persistence may be disabled or unreachable"),
     } satisfies Partial<CommerceApiError>);
   });
 });

@@ -9,9 +9,14 @@ import {
 import type {
   ArtifactItem,
   FetchPriceMonitoringResult,
+  PriceMonitoringDbStatus,
   PriceMonitoringFetchLogsResponse,
   PriceMonitoringRun,
 } from "../api/commerceTypes";
+import {
+  getPriceMonitoringDbBlockingMessage,
+  isPriceMonitoringDbReady,
+} from "../api/priceMonitoringDbGate";
 import {
   formatFetchStatus,
   getFetchStatusTone,
@@ -26,6 +31,7 @@ import {
 } from "../api/priceMonitoringUtils";
 import { ArtifactList } from "../components/ArtifactList";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
+import { PriceMonitoringDbStatusBanner } from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
 import { usePersistentPageState } from "../hooks/usePersistentPageState";
 
 interface ExecutionsPageState {
@@ -142,6 +148,9 @@ export function PriceMonitoringExecutionsPage() {
   const [logs, setLogs] = useState<PriceMonitoringFetchLogsResponse | null>(null);
   const [logsError, setLogsError] = useState<string | null>(null);
   const [isLogsLoading, setIsLogsLoading] = useState(false);
+  const [dbStatus, setDbStatus] = useState<PriceMonitoringDbStatus | null>(null);
+  const [dbStatusError, setDbStatusError] = useState<string | null>(null);
+  const [isDbStatusLoading, setIsDbStatusLoading] = useState(false);
 
   const sortedExecutions = useMemo(() => sortExecutions(executions), [executions]);
   const selectedExecution =
@@ -162,6 +171,27 @@ export function PriceMonitoringExecutionsPage() {
     },
     [setWorkflowState],
   );
+
+  const loadDbStatus = useCallback(async (signal?: AbortSignal) => {
+    setIsDbStatusLoading(true);
+    setDbStatusError(null);
+    try {
+      const status = await commerceClient.getPriceMonitoringDbStatus(signal);
+      if (signal?.aborted) {
+        return;
+      }
+      setDbStatus(status);
+    } catch (error) {
+      if (!signal?.aborted) {
+        setDbStatus(null);
+        setDbStatusError(getCommerceApiErrorMessage(error));
+      }
+    } finally {
+      if (!signal?.aborted) {
+        setIsDbStatusLoading(false);
+      }
+    }
+  }, []);
 
   const loadExecutions = useCallback(
     async (signal?: AbortSignal) => {
@@ -192,7 +222,11 @@ export function PriceMonitoringExecutionsPage() {
           return;
         } else {
           setRun(null);
-          setRunWarning(`Run details could not be loaded: ${getCommerceApiErrorMessage(runResult.reason)}`);
+          if (runResult.reason instanceof CommerceApiError && runResult.reason.status === 503) {
+            setRunWarning(getPriceMonitoringDbBlockingMessage(null));
+          } else {
+            setRunWarning(`Run details could not be loaded: ${getCommerceApiErrorMessage(runResult.reason)}`);
+          }
         }
 
         if (executionResult.status === "fulfilled") {
@@ -210,7 +244,12 @@ export function PriceMonitoringExecutionsPage() {
           clearSavedRun(`Saved Price Monitoring run ${runId} was not found. The saved run selection was cleared.`);
         } else {
           setExecutions([]);
-          setError(getCommerceApiErrorMessage(executionResult.reason));
+          if (executionResult.reason instanceof CommerceApiError && executionResult.reason.status === 503) {
+            setError(null);
+            setRunWarning(getPriceMonitoringDbBlockingMessage(null));
+          } else {
+            setError(getCommerceApiErrorMessage(executionResult.reason));
+          }
         }
       } finally {
         if (!signal?.aborted) {
@@ -223,9 +262,9 @@ export function PriceMonitoringExecutionsPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    void loadExecutions(controller.signal);
+    void Promise.all([loadDbStatus(controller.signal), loadExecutions(controller.signal)]);
     return () => controller.abort();
-  }, [loadExecutions]);
+  }, [loadDbStatus, loadExecutions]);
 
   useEffect(() => {
     if (!sortedExecutions.some((execution) => isActiveFetchStatus(execution.status))) {
@@ -241,6 +280,11 @@ export function PriceMonitoringExecutionsPage() {
 
   const loadLogs = async () => {
     if (!runId || !selectedExecution?.execution_id) {
+      return;
+    }
+
+    if (!isPriceMonitoringDbReady(dbStatus)) {
+      setLogsError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -267,6 +311,11 @@ export function PriceMonitoringExecutionsPage() {
 
   const refetchKilledExecution = async () => {
     if (!runId || !selectedExecution || !isKilledFetchStatus(selectedExecution.status)) {
+      return;
+    }
+
+    if (!isPriceMonitoringDbReady(dbStatus)) {
+      setError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -307,6 +356,9 @@ export function PriceMonitoringExecutionsPage() {
   const diagnosticArtifacts = selectedExecution
     ? shouldTreatArtifactsAsDiagnostic(selectedExecution)
     : false;
+  const dbAvailable = isPriceMonitoringDbReady(dbStatus);
+  const dbBlockingMessage = getPriceMonitoringDbBlockingMessage(dbStatus);
+  const dbActionTitle = dbAvailable ? undefined : dbBlockingMessage;
 
   return (
     <div className="page-stack">
@@ -318,6 +370,13 @@ export function PriceMonitoringExecutionsPage() {
           Reset saved Executions state
         </button>
       </section>
+
+      <PriceMonitoringDbStatusBanner
+        status={dbStatus}
+        error={dbStatusError}
+        isLoading={isDbStatusLoading}
+        onRetry={() => void loadDbStatus()}
+      />
 
       {!runId ? (
         <EmptyState
@@ -361,14 +420,26 @@ export function PriceMonitoringExecutionsPage() {
                 <p className="eyebrow">Executions</p>
                 <h3>History for run {runId}</h3>
               </div>
-              <button className="button secondary" type="button" onClick={() => void loadExecutions()}>
+              <button
+                className="button secondary"
+                type="button"
+                disabled={!dbAvailable}
+                title={dbActionTitle}
+                onClick={() => void loadExecutions()}
+              >
                 Refresh
               </button>
             </div>
 
             {isLoading ? <LoadingState label="Loading fetch executions..." /> : null}
             {error ? <ErrorState message={error} onRetry={() => void loadExecutions()} /> : null}
-            {!isLoading && !error && sortedExecutions.length === 0 ? (
+            {!dbAvailable ? (
+              <EmptyState
+                title="Execution history locked"
+                message={dbBlockingMessage}
+              />
+            ) : null}
+            {dbAvailable && !isLoading && !error && sortedExecutions.length === 0 ? (
               <EmptyState title="No executions" message="No fetch executions were returned for this run." />
             ) : null}
             {sortedExecutions.length > 0 ? (
@@ -448,7 +519,8 @@ export function PriceMonitoringExecutionsPage() {
                   <button
                     className="button secondary"
                     type="button"
-                    disabled={isRefetching}
+                    disabled={isRefetching || !dbAvailable}
+                    title={dbActionTitle}
                     onClick={() => void refetchKilledExecution()}
                   >
                     {isRefetching ? "Refetching..." : "Refetch"}
@@ -495,7 +567,13 @@ export function PriceMonitoringExecutionsPage() {
                   <strong>Log preview</strong>
                   <span className="muted"> {logs?.lines.length ?? 0} lines loaded</span>
                 </summary>
-                <button className="button secondary" type="button" disabled={isLogsLoading} onClick={loadLogs}>
+                <button
+                  className="button secondary"
+                  type="button"
+                  disabled={isLogsLoading || !dbAvailable}
+                  title={dbActionTitle}
+                  onClick={loadLogs}
+                >
                   {isLogsLoading ? "Loading logs..." : "Preview logs"}
                 </button>
                 {logsError ? <p className="form-error">{logsError}</p> : null}

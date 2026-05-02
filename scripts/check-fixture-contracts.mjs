@@ -353,7 +353,20 @@ const commerceCritical = [
       },
     ],
   },
-  { method: "GET", path: "/api/price-monitoring/db/status", fields: ["configured", "reachable", "error"] },
+  {
+    method: "GET",
+    path: "/api/price-monitoring/db/status",
+    fields: [
+      "configured",
+      "reachable",
+      "error",
+      "price_monitoring_requires_database",
+      "ready_for_price_monitoring",
+      "blocking_reasons",
+      "non_db_workflows_available",
+      "required_for",
+    ],
+  },
   { method: "GET", path: "/api/price-monitoring/runs", fields: ["items"] },
   { method: "GET", path: "/api/price-monitoring/runs/{run_id}", fields: ["run_id", "source", "created_at", "db"] },
   {
@@ -473,6 +486,52 @@ function compareRoutes({ backend, openapi, routes, critical }) {
   return seen;
 }
 
+function assertCommerceDbRequiredErrorFixtures(routes) {
+  routes.forEach((route) => {
+    const label = `commerce DB-required fixture ${routeKey(route)}`;
+    const response = getFixtureResponse(route);
+    if (!isRecord(response)) {
+      fail(`${label}: response is not an object.`);
+      return;
+    }
+
+    if (response.status !== 503) {
+      fail(`${label}: response status must be 503.`);
+    }
+
+    if (!isRecord(response.body)) {
+      fail(`${label}: response body is not an object.`);
+      return;
+    }
+
+    assertFields(label, response.body, [
+      "detail",
+      "status",
+      "ready_for_price_monitoring",
+      "blocking_reasons",
+      "non_db_workflows_available",
+    ]);
+
+    if (response.body.ready_for_price_monitoring !== false) {
+      fail(`${label}: ready_for_price_monitoring must be false.`);
+    }
+
+    if (!isRecord(response.body.status)) {
+      fail(`${label}: body.status must contain the DB status object.`);
+      return;
+    }
+
+    assertFields(`${label} body.status`, response.body.status, [
+      "configured",
+      "reachable",
+      "price_monitoring_requires_database",
+      "ready_for_price_monitoring",
+      "blocking_reasons",
+      "non_db_workflows_available",
+    ]);
+  });
+}
+
 const commerceOpenapi = readJson(SNAPSHOTS.commerce);
 const productAgentOpenapi = readJson(SNAPSHOTS.productAgent);
 
@@ -484,6 +543,10 @@ if (commerceOpenapi && productAgentOpenapi) {
   const commerceRoutes = await loadTsFixture(
     path.join(uiRoot, "src", "test", "fixtures", "commerceApi.ts"),
     "commerceFixtureRoutes",
+  );
+  const commerceDbRequiredRoutes = await loadTsFixture(
+    path.join(uiRoot, "src", "test", "fixtures", "commerceApi.ts"),
+    "commerceDbRequiredFixtureRoutes",
   );
 
   compareRoutes({
@@ -498,6 +561,13 @@ if (commerceOpenapi && productAgentOpenapi) {
     routes: commerceRoutes,
     critical: commerceCritical,
   });
+  compareRoutes({
+    backend: "commerce",
+    openapi: commerceOpenapi,
+    routes: commerceDbRequiredRoutes,
+    critical: [],
+  });
+  assertCommerceDbRequiredErrorFixtures(commerceDbRequiredRoutes);
 }
 
 warnings.forEach((message) => console.warn(`WARN: ${message}`));

@@ -4,7 +4,11 @@ import {
   PRICE_MONITORING_STATE_KEY,
   initialPriceMonitoringWorkflowState,
 } from "../../api/priceMonitoringUtils";
-import { dbStatusUnavailable, commerceFixtureRoutes } from "../fixtures/commerceApi";
+import {
+  commerceDbRequiredFixtureRoutes,
+  commerceFixtureRoutes,
+  dbStatusUnavailable,
+} from "../fixtures/commerceApi";
 import { productAgentFilterRevision, productAgentFixtureRoutes } from "../fixtures/productAgentApi";
 import { installMockFetch } from "../mockFetch";
 import { renderWithRouter } from "../renderWithRouter";
@@ -53,9 +57,46 @@ describe("platform mocked page smoke tests", () => {
     renderWithRouter("/price-monitoring");
 
     await expect(screen.findByRole("heading", { name: "Competitor price workflow" })).resolves.toBeInTheDocument();
-    await expect(screen.findAllByText("Database available")).resolves.not.toHaveLength(0);
+    await expect(screen.findAllByText("Database ready")).resolves.not.toHaveLength(0);
     await expect(screen.findByText("pm-run-001")).resolves.toBeInTheDocument();
     expect(screen.getByText("exec-success")).toBeInTheDocument();
+  });
+
+  it("shows the Price Monitoring DB-required banner and disables primary actions when DB is not ready", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: dbStatusUnavailable,
+      },
+      ...commerceDbRequiredFixtureRoutes,
+      ...allRoutes,
+    ]);
+
+    renderWithRouter("/price-monitoring");
+
+    await expect(
+      screen.findAllByText(
+        "PostgreSQL is required for Price Monitoring. Catalog, CSV/Bridge, files, and artifacts may still be available.",
+      ),
+    ).resolves.not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Preview" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create run" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Fetch prices" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Load review" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Export OpenCart price update CSV" })).toBeDisabled();
+  });
+
+  it("enables Price Monitoring primary actions when DB is ready", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/price-monitoring");
+
+    await expect(screen.findAllByText("Database ready")).resolves.not.toHaveLength(0);
+    expect(screen.getByRole("button", { name: "Preview" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create run" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Fetch prices" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Load review" })).toBeEnabled();
   });
 
   it("renders Price Monitoring Executions for a selected run", async () => {
@@ -86,26 +127,93 @@ describe("platform mocked page smoke tests", () => {
     renderWithRouter("/price-monitoring/alerts");
 
     await expect(screen.findByRole("heading", { name: "Price Monitoring Alerts" })).resolves.toBeInTheDocument();
-    await expect(screen.findAllByText("Database available")).resolves.not.toHaveLength(0);
+    await expect(screen.findAllByText("Database ready")).resolves.not.toHaveLength(0);
     await expect(screen.findByText("Competitor price is below own price")).resolves.toBeInTheDocument();
     expect(screen.getByText("005606 below own price")).toBeInTheDocument();
   });
 
-  it("renders Price Monitoring Alerts DB-unavailable state", async () => {
+  it("renders Price Monitoring Executions DB-required state", async () => {
+    window.sessionStorage.setItem(
+      PRICE_MONITORING_STATE_KEY,
+      JSON.stringify({
+        version: 1,
+        state: {
+          ...initialPriceMonitoringWorkflowState,
+          currentRunId: "pm-run-001",
+          currentExecutionId: "exec-success",
+        },
+      }),
+    );
     installMockFetch([
       {
         method: "GET",
         path: "/commerce-api/price-monitoring/db/status",
         response: dbStatusUnavailable,
       },
+      ...commerceDbRequiredFixtureRoutes,
+      ...allRoutes,
+    ]);
+
+    renderWithRouter("/price-monitoring/executions");
+
+    await expect(screen.findByRole("heading", { name: "Fetch executions" })).resolves.toBeInTheDocument();
+    await expect(screen.findAllByText("Database not ready")).resolves.not.toHaveLength(0);
+    await expect(screen.findByText("Execution history locked")).resolves.toBeInTheDocument();
+  });
+
+  it("renders Price Monitoring Alerts DB-required state", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: dbStatusUnavailable,
+      },
+      ...commerceDbRequiredFixtureRoutes,
       ...allRoutes,
     ]);
 
     renderWithRouter("/price-monitoring/alerts");
 
-    await expect(screen.findAllByText("Database unavailable")).resolves.not.toHaveLength(0);
+    await expect(screen.findAllByText("Database not ready")).resolves.not.toHaveLength(0);
+    await expect(screen.findByText("Alert events locked")).resolves.toBeInTheDocument();
     expect(screen.getByText("Not reachable")).toBeInTheDocument();
-    expect(screen.getByText("connection refused")).toBeInTheDocument();
+    expect(screen.getAllByText("connection refused").length).toBeGreaterThan(0);
+  });
+
+  it("keeps Catalog usable when Price Monitoring DB is not ready", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: dbStatusUnavailable,
+      },
+      ...commerceDbRequiredFixtureRoutes,
+      ...allRoutes,
+    ]);
+
+    renderWithRouter("/catalog");
+
+    await expect(screen.findByRole("heading", { name: "Commerce catalog" })).resolves.toBeInTheDocument();
+    await expect(screen.findByText("005606")).resolves.toBeInTheDocument();
+    expect(screen.queryByText("Database not ready")).not.toBeInTheDocument();
+  });
+
+  it("keeps CSV/Bridge usable when Price Monitoring DB is not ready", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/price-monitoring/db/status",
+        response: dbStatusUnavailable,
+      },
+      ...commerceDbRequiredFixtureRoutes,
+      ...allRoutes,
+    ]);
+
+    renderWithRouter("/csv-bridge");
+
+    await expect(screen.findByRole("heading", { name: "CSV bridge workspace" })).resolves.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Safe file browser" })).toBeInTheDocument();
+    expect(screen.queryByText("Database not ready")).not.toBeInTheDocument();
   });
 
   it("renders Jobs with active and terminal statuses", async () => {

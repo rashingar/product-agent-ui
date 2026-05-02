@@ -1,6 +1,6 @@
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { commerceClient, getCommerceApiErrorMessage } from "../api/commerceClient";
+import { CommerceApiError, commerceClient, getCommerceApiErrorMessage } from "../api/commerceClient";
 import type {
   AlertEvent,
   AlertEventStatus,
@@ -11,10 +11,11 @@ import type {
   UpdateAlertRuleBody,
 } from "../api/commerceTypes";
 import { EmptyState, ErrorState, LoadingState } from "../components/layout/StateBlocks";
+import { PriceMonitoringDbStatusBanner } from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
 import {
-  isPriceMonitoringDbAvailable,
-  PriceMonitoringDbStatusBanner,
-} from "../components/priceMonitoring/PriceMonitoringDbStatusBanner";
+  getPriceMonitoringDbBlockingMessage,
+  isPriceMonitoringDbReady,
+} from "../api/priceMonitoringDbGate";
 import { usePersistentPageState } from "../hooks/usePersistentPageState";
 
 type AlertStatusFilter = AlertEventStatus | "all";
@@ -56,6 +57,10 @@ const EMPTY_COUNTS: AlertCounts = {
   resolved: 0,
   total: 0,
 };
+
+function isDbRequiredError(error: unknown): boolean {
+  return error instanceof CommerceApiError && error.status === 503;
+}
 
 export function parseNumberLike(value: unknown): number | null {
   if (typeof value === "number") {
@@ -457,7 +462,7 @@ export function PriceMonitoringAlertsPage() {
       setCountsError(null);
     } catch (error) {
       if (!signal?.aborted) {
-        setCountsError(getCommerceApiErrorMessage(error));
+        setCountsError(isDbRequiredError(error) ? null : getCommerceApiErrorMessage(error));
         setCounts(EMPTY_COUNTS);
       }
     } finally {
@@ -492,7 +497,7 @@ export function PriceMonitoringAlertsPage() {
         setEventsError(null);
       } catch (error) {
         if (!signal?.aborted) {
-          setEventsError(getCommerceApiErrorMessage(error));
+          setEventsError(isDbRequiredError(error) ? null : getCommerceApiErrorMessage(error));
           setEvents([]);
           setEventCount(0);
         }
@@ -517,7 +522,7 @@ export function PriceMonitoringAlertsPage() {
       setRulesError(null);
     } catch (error) {
       if (!signal?.aborted) {
-        setRulesError(getCommerceApiErrorMessage(error));
+        setRulesError(isDbRequiredError(error) ? null : getCommerceApiErrorMessage(error));
         setRules([]);
       }
     } finally {
@@ -567,8 +572,8 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const acknowledgeEvent = async (event: AlertEvent) => {
-    if (!isPriceMonitoringDbAvailable(dbStatus)) {
-      setEventsError("Database is unavailable. Alert write actions are disabled.");
+    if (!isPriceMonitoringDbReady(dbStatus)) {
+      setEventsError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -589,8 +594,8 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const resolveEvent = async (event: AlertEvent) => {
-    if (!isPriceMonitoringDbAvailable(dbStatus)) {
-      setEventsError("Database is unavailable. Alert write actions are disabled.");
+    if (!isPriceMonitoringDbReady(dbStatus)) {
+      setEventsError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -615,8 +620,8 @@ export function PriceMonitoringAlertsPage() {
     setFormError(null);
     setFormMessage(null);
 
-    if (!isPriceMonitoringDbAvailable(dbStatus)) {
-      setFormError("Database is unavailable. Alert rule write actions are disabled.");
+    if (!isPriceMonitoringDbReady(dbStatus)) {
+      setFormError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -660,8 +665,8 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const deactivateRule = async (rule: AlertRule) => {
-    if (!isPriceMonitoringDbAvailable(dbStatus)) {
-      setRulesError("Database is unavailable. Alert rule write actions are disabled.");
+    if (!isPriceMonitoringDbReady(dbStatus)) {
+      setRulesError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -690,8 +695,8 @@ export function PriceMonitoringAlertsPage() {
 
   const submitEvaluate = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!isPriceMonitoringDbAvailable(dbStatus)) {
-      setEvaluateError("Database is unavailable. Alert evaluation write actions are disabled.");
+    if (!isPriceMonitoringDbReady(dbStatus)) {
+      setEvaluateError(getPriceMonitoringDbBlockingMessage(dbStatus));
       return;
     }
 
@@ -716,10 +721,10 @@ export function PriceMonitoringAlertsPage() {
   };
 
   const thresholdsEmpty = !ruleForm.threshold_amount.trim() && !ruleForm.threshold_percent.trim();
-  const dbAvailable = isPriceMonitoringDbAvailable(dbStatus);
+  const dbAvailable = isPriceMonitoringDbReady(dbStatus);
   const dbUnavailableTitle = dbAvailable
     ? undefined
-    : "Database is unavailable. Alert write actions are disabled.";
+    : getPriceMonitoringDbBlockingMessage(dbStatus);
 
   const resetSavedAlertsState = () => {
     resetPersistedState();
@@ -767,7 +772,10 @@ export function PriceMonitoringAlertsPage() {
 
         {isCountsLoading ? <LoadingState label="Loading alert totals..." /> : null}
         {countsError ? <ErrorState message={countsError} onRetry={() => void loadCounts()} /> : null}
-        {!countsError ? (
+        {!dbAvailable ? (
+          <EmptyState title="Alert totals locked" message={dbUnavailableTitle ?? ""} />
+        ) : null}
+        {!countsError && dbAvailable ? (
           <dl className="summary-grid alert-summary-grid">
             <SummaryItem label="Open alerts" value={counts.open} />
             <SummaryItem label="Acknowledged alerts" value={counts.acknowledged} />
@@ -814,7 +822,10 @@ export function PriceMonitoringAlertsPage() {
 
         {isEventsLoading ? <LoadingState label="Loading alert events..." /> : null}
         {eventsError ? <ErrorState message={eventsError} onRetry={() => void loadEvents()} /> : null}
-        {!isEventsLoading && !eventsError && events.length === 0 ? (
+        {!dbAvailable ? (
+          <EmptyState title="Alert events locked" message={dbUnavailableTitle ?? ""} />
+        ) : null}
+        {dbAvailable && !isEventsLoading && !eventsError && events.length === 0 ? (
           <EmptyState
             title="No alerts found"
             message="Create a rule and evaluate a run to generate dashboard alert records."
@@ -919,7 +930,10 @@ export function PriceMonitoringAlertsPage() {
 
         {isRulesLoading ? <LoadingState label="Loading alert rules..." /> : null}
         {rulesError ? <ErrorState message={rulesError} onRetry={() => void loadRules()} /> : null}
-        {!isRulesLoading && !rulesError && rules.length === 0 ? (
+        {!dbAvailable ? (
+          <EmptyState title="Alert rules locked" message={dbUnavailableTitle ?? ""} />
+        ) : null}
+        {dbAvailable && !isRulesLoading && !rulesError && rules.length === 0 ? (
           <EmptyState title="No alert rules" message="Create a competitor-below-own-price rule to start monitoring." />
         ) : null}
         {!rulesError && rules.length > 0 ? (
@@ -1096,9 +1110,7 @@ export function PriceMonitoringAlertsPage() {
           {formError ? <p className="form-error">{formError}</p> : null}
           {formMessage ? <p className="state-block">{formMessage}</p> : null}
           {!dbAvailable ? (
-            <p className="form-warning">
-              Database is unavailable. Read-only views may fail, and alert write actions are disabled until PostgreSQL is configured, reachable, and migrated.
-            </p>
+            <p className="form-warning">{dbUnavailableTitle}</p>
           ) : null}
 
           <button

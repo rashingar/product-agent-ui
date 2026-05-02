@@ -112,6 +112,12 @@ The browser always uses the `/commerce-api` proxy for commerce calls. Vite rewri
 requests to `/api` on the commerce backend, so `GET /commerce-api/health` reaches
 `GET http://127.0.0.1:8001/api/health`.
 
+PostgreSQL is mandatory for Price Monitoring workflow actions, execution history, and alerts.
+The UI reads `GET /commerce-api/price-monitoring/db/status` and only enables those workflows when
+`ready_for_price_monitoring` is `true`. A DB-not-ready response is treated as a Price Monitoring
+lock, not as a full commerce backend outage; Catalog, CSV/Bridge, files, paths, artifacts, and
+general health remain usable when their endpoints are running.
+
 ## Windows 10 Setup
 
 This repo works without WSL. From Command Prompt or PowerShell in this folder, run:
@@ -298,10 +304,10 @@ npm run preview
   refresh in the same session using `sessionStorage`. Per-page subtle reset actions clear saved
   state. Large server-backed results such as catalog rows, observation tables, review tables, CSV
   contents, and API responses are reloaded instead of permanently stored.
-- The Price Monitoring and Price Alerts pages show database status banners. When the database is
-  unavailable, DB-backed write actions are disabled, but read-only tables and file-backed
-  selection/fetch/review/export workflows remain visible and usable where the backend supports
-  them.
+- The Price Monitoring and Price Alerts pages show database status banners. PostgreSQL is required
+  for Price Monitoring preview, run creation, fetch, review, review actions, export, execution
+  history, and alert workflows. When DB readiness fails, those workflows are locked while Catalog,
+  CSV/Bridge, files, paths, artifacts, and general commerce backend health remain usable.
 - BestPrice fetches can include an optional `catalog_url` hint, while the backend may also
   resolve products from MPN data.
 - Price Monitoring export is CSV only. The UI does not update OpenCart automatically.

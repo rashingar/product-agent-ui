@@ -758,15 +758,60 @@ function normalizeDbStatus(payload: unknown): PriceMonitoringDbStatus {
     return {
       configured: false,
       reachable: false,
+      price_monitoring_requires_database: true,
+      ready_for_price_monitoring: false,
+      blocking_reasons: ["Database status response was not an object."],
+      non_db_workflows_available: true,
+      required_for: ["price-monitoring"],
       dialect: null,
       error: null,
     };
   }
 
+  const configured = payload.configured === true;
+  const reachable = payload.reachable === true;
+  const requiredTablesPresent =
+    typeof payload.required_tables_present === "boolean" || payload.required_tables_present === null
+      ? payload.required_tables_present
+      : null;
+  const alembicUpToDate =
+    typeof payload.alembic_up_to_date === "boolean" || payload.alembic_up_to_date === null
+      ? payload.alembic_up_to_date
+      : null;
+  const inferredReady = configured && reachable && requiredTablesPresent !== false && alembicUpToDate !== false;
+  const readyForPriceMonitoring =
+    typeof payload.ready_for_price_monitoring === "boolean"
+      ? payload.ready_for_price_monitoring
+      : inferredReady;
+
   return {
     ...payload,
-    configured: payload.configured === true,
-    reachable: payload.reachable === true,
+    configured,
+    reachable,
+    price_monitoring_requires_database:
+      typeof payload.price_monitoring_requires_database === "boolean" ||
+      payload.price_monitoring_requires_database === null
+        ? payload.price_monitoring_requires_database
+        : true,
+    ready_for_price_monitoring: readyForPriceMonitoring,
+    blocking_reasons:
+      Array.isArray(payload.blocking_reasons)
+        ? normalizeStringArray(payload.blocking_reasons)
+        : payload.blocking_reasons === null
+          ? null
+          : readyForPriceMonitoring
+            ? []
+            : undefined,
+    non_db_workflows_available:
+      typeof payload.non_db_workflows_available === "boolean" || payload.non_db_workflows_available === null
+        ? payload.non_db_workflows_available
+        : true,
+    required_for:
+      Array.isArray(payload.required_for)
+        ? normalizeStringArray(payload.required_for)
+        : payload.required_for === null
+          ? null
+          : ["price-monitoring"],
     dialect:
       typeof payload.dialect === "string" || payload.dialect === null
         ? payload.dialect
@@ -775,14 +820,8 @@ function normalizeDbStatus(payload: unknown): PriceMonitoringDbStatus {
       typeof payload.error === "string" || payload.error === null
         ? payload.error
         : null,
-    required_tables_present:
-      typeof payload.required_tables_present === "boolean" || payload.required_tables_present === null
-        ? payload.required_tables_present
-        : null,
-    alembic_up_to_date:
-      typeof payload.alembic_up_to_date === "boolean" || payload.alembic_up_to_date === null
-        ? payload.alembic_up_to_date
-        : null,
+    required_tables_present: requiredTablesPresent,
+    alembic_up_to_date: alembicUpToDate,
     alembic_current_revision:
       typeof payload.alembic_current_revision === "string" || payload.alembic_current_revision === null
         ? payload.alembic_current_revision
@@ -1093,7 +1132,7 @@ async function request<T>(path: string, options: CommerceRequestOptions = {}): P
         : "";
     const dbHint =
       response.status === 503 && path.startsWith("/price-monitoring/")
-        ? " Price monitoring DB persistence may be disabled or unreachable."
+        ? " PostgreSQL is required for Price Monitoring; Catalog, CSV/Bridge, files, and artifacts may still be available."
         : "";
     const message = `Commerce API ${response.status} at ${path}: ${backendMessage}${pathHint}${setupHint}${dbHint}`;
     throw new CommerceApiError(message, response.status, payload, path);
