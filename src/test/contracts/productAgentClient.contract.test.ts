@@ -3,6 +3,8 @@ import { ApiError, apiClient } from "../../api/client";
 import { installMockFetch } from "../mockFetch";
 import {
   productAgentConflictError,
+  productAgentFilterCategoryWriteDetail,
+  productAgentFilterRevision,
   productAgentFixtureRoutes,
   productAgentJobs,
   productAgentValidationError,
@@ -62,6 +64,7 @@ describe("Product-Agent API client contract fixtures", () => {
     await expect(apiClient.getFilterStatus()).resolves.toMatchObject({
       status: "ready",
       category_count: 2,
+      revision: productAgentFilterRevision,
     });
 
     const categories = await apiClient.listFilterCategories();
@@ -71,7 +74,7 @@ describe("Product-Agent API client contract fixtures", () => {
     });
 
     const category = await apiClient.getFilterCategory(310);
-    expect(category).toMatchObject({ category_id: 310 });
+    expect(category).toMatchObject({ category_id: 310, revision: productAgentFilterRevision });
     expect(category.groups).toEqual(
       expect.arrayContaining([expect.objectContaining({ group_id: "grp-capacity" })]),
     );
@@ -79,6 +82,92 @@ describe("Product-Agent API client contract fixtures", () => {
     await expect(apiClient.getFilterSyncReport()).resolves.toMatchObject({
       mode: "mocked",
       warnings: [expect.objectContaining({ category_id: 310 })],
+    });
+  });
+
+  it("includes expected_revision in add group requests", async () => {
+    const mock = installMockFetch([
+      {
+        method: "PUT",
+        path: "/api/filters/categories/310/groups",
+        response: productAgentFilterCategoryWriteDetail,
+      },
+    ]);
+
+    await apiClient.addFilterGroup(310, {
+      expected_revision: "rev-client-add-group",
+      name: "Ενεργειακή κλάση",
+      required: false,
+      status: "active",
+    });
+
+    expect(mock.requests[0].body).toMatchObject({
+      expected_revision: "rev-client-add-group",
+      name: "Ενεργειακή κλάση",
+    });
+  });
+
+  it("includes expected_revision in update group requests", async () => {
+    const mock = installMockFetch([
+      {
+        method: "PATCH",
+        path: "/api/filters/categories/310/groups/grp-capacity",
+        response: productAgentFilterCategoryWriteDetail,
+      },
+    ]);
+
+    await apiClient.updateFilterGroup(310, "grp-capacity", {
+      expected_revision: "rev-client-update-group",
+      name: "Χωρητικότητα",
+      required: true,
+      status: "active",
+    });
+
+    expect(mock.requests[0].body).toMatchObject({
+      expected_revision: "rev-client-update-group",
+      name: "Χωρητικότητα",
+    });
+  });
+
+  it("includes expected_revision in add value requests", async () => {
+    const mock = installMockFetch([
+      {
+        method: "PUT",
+        path: "/api/filters/categories/310/groups/grp-wifi/values",
+        response: productAgentFilterCategoryWriteDetail,
+      },
+    ]);
+
+    await apiClient.addFilterValue(310, "grp-wifi", {
+      expected_revision: "rev-client-add-value",
+      value: "Μερικώς",
+      status: "active",
+    });
+
+    expect(mock.requests[0].body).toMatchObject({
+      expected_revision: "rev-client-add-value",
+      value: "Μερικώς",
+    });
+  });
+
+  it("includes expected_revision in update value requests", async () => {
+    const mock = installMockFetch([
+      {
+        method: "PATCH",
+        path: "/api/filters/categories/310/groups/grp-wifi/values/val-yes",
+        response: productAgentFilterCategoryWriteDetail,
+      },
+    ]);
+
+    await apiClient.updateFilterValue(310, "grp-wifi", "val-yes", {
+      expected_revision: "rev-client-update-value",
+      value: "Ναι",
+      status: "active",
+    });
+
+    expect(mock.requests[0].body).toMatchObject({
+      expected_revision: "rev-client-update-value",
+      value: "Ναι",
     });
   });
 

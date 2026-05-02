@@ -1,5 +1,8 @@
 import type { MockRoute } from "../mockFetch";
 
+export const productAgentFilterRevision = "f1lterrev00112233445566778899";
+export const productAgentFilterWriteRevision = "f1lterrev99112233445566778899";
+
 export const productAgentHealth = {
   status: "ok",
   service: "product-agent",
@@ -136,6 +139,7 @@ export const productAgentFilterStatus = {
   filter_map_base_path: "fixtures/base-filter-map.json",
   filter_map_manual_overrides_path: "fixtures/manual-filter-overrides.json",
   filter_map_path: "fixtures/filter-map.json",
+  revision: productAgentFilterRevision,
   sync_report_path: "fixtures/filter-sync-report.json",
   valid_statuses: ["active", "inactive", "deprecated"],
   status: "ready",
@@ -146,6 +150,7 @@ export const productAgentFilterStatus = {
     filter_map_base_path: "fixtures/base-filter-map.json",
     filter_map_manual_overrides_path: "fixtures/manual-filter-overrides.json",
     filter_map_path: "fixtures/filter-map.json",
+    revision: productAgentFilterRevision,
     sync_report_path: "fixtures/filter-sync-report.json",
     valid_statuses: ["active", "inactive", "deprecated"],
     status: "ready",
@@ -195,6 +200,7 @@ export const productAgentFilterCategoryDetail = {
   leaf_category: "Αφυγραντήρες",
   sub_category: "Αφυγραντήρες",
   key: "climate/dehumidifiers",
+  revision: productAgentFilterRevision,
   source: "merged",
   groups: [
     {
@@ -227,6 +233,7 @@ export const productAgentFilterCategoryDetail = {
     leaf_category: "Αφυγραντήρες",
     sub_category: "Αφυγραντήρες",
     key: "climate/dehumidifiers",
+    revision: productAgentFilterRevision,
     source: "merged",
     groups: [
       {
@@ -253,6 +260,28 @@ export const productAgentFilterCategoryDetail = {
       },
     ],
   },
+};
+
+export const productAgentFilterCategoryWriteDetail = {
+  ...productAgentFilterCategoryDetail,
+  revision: productAgentFilterWriteRevision,
+  category: {
+    ...productAgentFilterCategoryDetail.category,
+    revision: productAgentFilterWriteRevision,
+  },
+};
+
+export const productAgentFilterSyncResponse = {
+  status: "synced",
+  revision: productAgentFilterWriteRevision,
+  filter_map_path: "fixtures/filter-map.json",
+  sync_report_path: "fixtures/filter-sync-report.json",
+  category_count: 2,
+  group_count: 3,
+  value_count: 6,
+  warning_count: 1,
+  overridden_group_count: 1,
+  overridden_value_count: 1,
 };
 
 export const productAgentFilterSyncReport = {
@@ -370,6 +399,11 @@ export const productAgentConflictError = {
   body: { detail: "A job is already running for model 005606." },
 };
 
+export const productAgentFilterStaleRevisionError = {
+  status: 409,
+  body: { detail: "Filter map revision mismatch. Reload category before saving." },
+};
+
 export const productAgentValidationError = {
   status: 422,
   body: {
@@ -394,6 +428,49 @@ export const productAgentFixtureRoutes: MockRoute[] = [
     path: "/api/filters/categories/310",
     response: productAgentFilterCategoryDetail,
   },
+  {
+    method: "PUT",
+    path: "/api/filters/categories/310/groups",
+    requestExample: {
+      expected_revision: productAgentFilterRevision,
+      name: "Ενεργειακή κλάση",
+      required: false,
+      status: "active",
+    },
+    response: productAgentFilterCategoryWriteDetail,
+  },
+  {
+    method: "PATCH",
+    path: "/api/filters/categories/310/groups/grp-capacity",
+    requestExample: {
+      expected_revision: productAgentFilterRevision,
+      name: "Χωρητικότητα",
+      required: true,
+      status: "active",
+    },
+    response: productAgentFilterCategoryWriteDetail,
+  },
+  {
+    method: "PUT",
+    path: "/api/filters/categories/310/groups/grp-wifi/values",
+    requestExample: {
+      expected_revision: productAgentFilterRevision,
+      value: "Μερικώς",
+      status: "active",
+    },
+    response: productAgentFilterCategoryWriteDetail,
+  },
+  {
+    method: "PATCH",
+    path: "/api/filters/categories/310/groups/grp-wifi/values/val-yes",
+    requestExample: {
+      expected_revision: productAgentFilterRevision,
+      value: "Ναι",
+      status: "active",
+    },
+    response: productAgentFilterCategoryWriteDetail,
+  },
+  { method: "POST", path: "/api/filters/sync", response: productAgentFilterSyncResponse },
   { method: "GET", path: "/api/filters/sync-report", response: productAgentFilterSyncReport },
   { method: "GET", path: "/api/filter-review/005606", response: productAgentFilterReview },
   { method: "GET", path: "/api/authoring/005606", response: productAgentAuthoring },

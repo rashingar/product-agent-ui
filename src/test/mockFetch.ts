@@ -17,6 +17,7 @@ export interface MockJsonResponse {
 export interface MockRoute {
   method?: string;
   path: string | RegExp | ((request: MockRequest) => boolean);
+  requestExample?: unknown;
   response:
     | unknown
     | MockJsonResponse

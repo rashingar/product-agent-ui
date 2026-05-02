@@ -193,6 +193,7 @@ export interface FilterCategoryDetail {
   leaf_category?: string | null;
   sub_category?: string | null;
   key?: string | null;
+  revision?: string | null;
   source?: FilterManagerSource | null;
   groups?: FilterGroup[];
   [key: string]: unknown;
@@ -217,29 +218,34 @@ export interface FilterValue {
 }
 
 export interface AddFilterGroupRequest {
+  expected_revision?: string | null;
   name: string;
   required: boolean;
   status: FilterManagerStatus;
 }
 
 export interface UpdateFilterGroupRequest {
+  expected_revision?: string | null;
   name?: string;
   required?: boolean;
   status?: FilterManagerStatus;
 }
 
 export interface AddFilterValueRequest {
+  expected_revision?: string | null;
   value: string;
   status: FilterManagerStatus;
 }
 
 export interface UpdateFilterValueRequest {
+  expected_revision?: string | null;
   value?: string;
   status?: FilterManagerStatus;
 }
 
 export interface FilterSyncResponse {
   status?: string;
+  revision?: string | null;
   filter_map_path?: string | null;
   sync_report_path?: string | null;
   category_count?: number | null;
@@ -264,5 +270,6 @@ export interface FilterSyncReport {
 
 export interface FilterManagerStatusResponse {
   status?: string;
+  revision?: string | null;
   [key: string]: unknown;
 }

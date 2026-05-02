@@ -5,7 +5,7 @@ import {
   initialPriceMonitoringWorkflowState,
 } from "../../api/priceMonitoringUtils";
 import { dbStatusUnavailable, commerceFixtureRoutes } from "../fixtures/commerceApi";
-import { productAgentFixtureRoutes } from "../fixtures/productAgentApi";
+import { productAgentFilterRevision, productAgentFixtureRoutes } from "../fixtures/productAgentApi";
 import { installMockFetch } from "../mockFetch";
 import { renderWithRouter } from "../renderWithRouter";
 
@@ -129,6 +129,7 @@ describe("platform mocked page smoke tests", () => {
 
     await expect(screen.findByRole("heading", { name: "Filters Manager" })).resolves.toBeInTheDocument();
     await expect(screen.findByRole("heading", { name: "Filters API ready" })).resolves.toBeInTheDocument();
+    await expect(screen.findByText(`Revision ${productAgentFilterRevision.slice(0, 12)}`)).resolves.toBeInTheDocument();
     await expect(screen.findByText("Χωρητικότητα")).resolves.toBeInTheDocument();
     expect(screen.getAllByText("Αφυγραντήρες").length).toBeGreaterThan(0);
     expect(screen.getByText("Wi-Fi")).toBeInTheDocument();

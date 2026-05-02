@@ -122,6 +122,11 @@ function responseSchema(openapi, operation) {
     : null;
 }
 
+function requestSchema(openapi, operation) {
+  const schema = operation?.requestBody?.content?.["application/json"]?.schema;
+  return schema ? resolveSchema(openapi, schema) : null;
+}
+
 function routeKey(route) {
   return `${route.method.toUpperCase()} ${route.path}`;
 }
@@ -131,6 +136,10 @@ function getFixtureResponse(route) {
     return route.response({ searchParams: new URLSearchParams() });
   }
   return route.response;
+}
+
+function getFixtureRequestExample(route) {
+  return route.requestExample;
 }
 
 async function loadTsFixture(filePath, exportName) {
@@ -195,6 +204,19 @@ function assertArrayItems(label, payload, arrayPath, fields) {
   });
 }
 
+function assertSchemaProperties(label, schema, fields) {
+  if (!isRecord(schema?.properties)) {
+    fail(`${label}: backend OpenAPI request schema has no properties.`);
+    return;
+  }
+
+  fields.forEach((field) => {
+    if (!hasOwn(schema.properties, field)) {
+      fail(`${label}: backend OpenAPI request schema is missing field "${field}".`);
+    }
+  });
+}
+
 const productAgentCritical = [
   { method: "GET", path: "/api/health", fields: ["status"] },
   {
@@ -219,6 +241,7 @@ const productAgentCritical = [
       "filter_map_base_path",
       "filter_map_manual_overrides_path",
       "filter_map_path",
+      "revision",
       "sync_report_path",
       "valid_statuses",
     ],
@@ -232,8 +255,37 @@ const productAgentCritical = [
   {
     method: "GET",
     path: "/api/filters/categories/{category_id}",
-    fields: ["category_id", "path", "groups"],
+    fields: ["category_id", "path", "revision", "groups"],
     arrays: [{ path: "groups", fields: ["group_id", "name", "required", "status", "source", "values"] }],
+  },
+  {
+    method: "PUT",
+    path: "/api/filters/categories/{category_id}/groups",
+    fields: ["category_id", "path", "revision", "groups"],
+    requestFields: ["expected_revision", "name"],
+  },
+  {
+    method: "PATCH",
+    path: "/api/filters/categories/{category_id}/groups/{group_id}",
+    fields: ["category_id", "path", "revision", "groups"],
+    requestFields: ["expected_revision"],
+  },
+  {
+    method: "PUT",
+    path: "/api/filters/categories/{category_id}/groups/{group_id}/values",
+    fields: ["category_id", "path", "revision", "groups"],
+    requestFields: ["expected_revision", "value"],
+  },
+  {
+    method: "PATCH",
+    path: "/api/filters/categories/{category_id}/groups/{group_id}/values/{value_id}",
+    fields: ["category_id", "path", "revision", "groups"],
+    requestFields: ["expected_revision"],
+  },
+  {
+    method: "POST",
+    path: "/api/filters/sync",
+    fields: ["status", "revision", "filter_map_path", "sync_report_path"],
   },
   {
     method: "GET",
@@ -390,6 +442,19 @@ function compareRoutes({ backend, openapi, routes, critical }) {
       });
     } else {
       warn(`${label}: no useful OpenAPI JSON response schema; using fixture field checks only.`);
+    }
+
+    if (check.requestFields) {
+      const schema = requestSchema(openapi, operationMatch.operation);
+      assertSchemaProperties(label, schema, check.requestFields);
+      matchingRoutes.forEach((route) => {
+        const requestExample = getFixtureRequestExample(route);
+        if (!requestExample) {
+          fail(`${label} (${route.path}): fixture route is missing requestExample.`);
+          return;
+        }
+        assertFields(`${label} (${route.path}) requestExample`, requestExample, check.requestFields);
+      });
     }
 
     if (backend === "commerce" && check.path === "/api/health" && schema?.properties?.service) {

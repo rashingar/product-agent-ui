@@ -20,9 +20,21 @@ The strict fetch helper in `src/test/mockFetch.ts` maps request method plus path
 - `GET /api/filters/status`
 - `GET /api/filters/categories`
 - `GET /api/filters/categories/{category_id}`
+- `PUT /api/filters/categories/{category_id}/groups`
+- `PATCH /api/filters/categories/{category_id}/groups/{group_id}`
+- `PUT /api/filters/categories/{category_id}/groups/{group_id}/values`
+- `PATCH /api/filters/categories/{category_id}/groups/{group_id}/values/{value_id}`
+- `POST /api/filters/sync`
 - `GET /api/filters/sync-report`
 - `GET /api/filter-review/{model}`
 - `GET /api/authoring/{model}`
+
+Filters Manager fixtures include the Product-Agent backend `revision` token on status,
+category detail, write responses, and sync responses. The backend revision is the source
+of truth for category writes. UI write request examples include `expected_revision`, and
+the fixture/OpenAPI comparison checks that the backend request schemas still expose that
+field for group/value add and update routes. A mocked 409 stale revision response is kept
+for page tests; operators must reload the category before saving after that conflict.
 
 ## Commerce Endpoints
 
@@ -44,6 +56,6 @@ The strict fetch helper in `src/test/mockFetch.ts` maps request method plus path
 
 ## Updating Fixtures
 
-When a backend contract intentionally changes, update the fixture payload first, then update the related client contract test and page smoke assertion. Keep payloads small but realistic, including representative Greek catalog/filter strings, leading-zero models, terminal and active statuses, DB unavailable examples, artifacts, and alert data.
+When a backend contract intentionally changes, update the fixture payload first, then update the related client contract test and page smoke assertion. Keep payloads small but realistic, including representative Greek catalog/filter strings, leading-zero models, terminal and active statuses, Filters Manager revision tokens, DB unavailable examples, artifacts, and alert data.
 
 Later backend prompts will add OpenAPI snapshot export and snapshot checks in the backend repositories. Those checks should complement these UI fixtures rather than replace them.

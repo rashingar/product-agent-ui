@@ -23,6 +23,8 @@ import { usePersistentPageState } from "../hooks/usePersistentPageState";
 const VALID_STATUSES: FilterManagerStatus[] = ["active", "inactive", "deprecated"];
 const SOURCE_FILTERS = ["all", "base", "manual", "merged"] as const;
 const FILTERS_MANAGER_STORAGE_KEY = "product-agent-ui:filters-manager:v1";
+const STALE_REVISION_MESSAGE =
+  "This filter category changed since you loaded it. Reload the category before saving.";
 
 type SourceFilter = (typeof SOURCE_FILTERS)[number];
 type BusyAction =
@@ -141,6 +143,16 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
+function getRevision(value: { revision?: string | null } | null | undefined): string | null {
+  return typeof value?.revision === "string" && value.revision.trim().length > 0
+    ? value.revision
+    : null;
+}
+
+function formatRevision(revision: string | null): string {
+  return revision ? revision.slice(0, 12) : "-";
+}
+
 function getCategoryId(category: Pick<FilterCategoryListItem, "category_id">): string {
   return String(category.category_id);
 }
@@ -155,6 +167,10 @@ function getWarningsCount(report: FilterSyncReport | null): number {
 
 function getArrayCount(value: unknown): number {
   return Array.isArray(value) ? value.length : 0;
+}
+
+function isStaleRevisionConflict(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409;
 }
 
 function StatusBadge({ status }: { status: unknown }) {
@@ -756,6 +772,8 @@ export function FiltersManagerPage() {
   const [categoryDetail, setCategoryDetail] = useState<FilterCategoryDetail | null>(null);
   const [syncResponse, setSyncResponse] = useState<FilterSyncResponse | null>(null);
   const [syncReport, setSyncReport] = useState<FilterSyncReport | null>(null);
+  const [backendRevision, setBackendRevision] = useState<string | null>(null);
+  const [revisionConflict, setRevisionConflict] = useState<string | null>(null);
   const [busyActions, setBusyActions] = useState<Set<BusyAction>>(new Set());
   const [loadError, setLoadError] = useState<string | null>(null);
   const [detailError, setDetailError] = useState<string | null>(null);
@@ -769,6 +787,7 @@ export function FiltersManagerPage() {
 
   const backendAvailable = isBackendHealthy(health, healthError);
   const writeDisabled = !backendAvailable || busyActions.has("sync");
+  const currentRevision = getRevision(categoryDetail) ?? backendRevision;
 
   function setBusy(action: BusyAction, busy: boolean) {
     setBusyActions((current) => {
@@ -801,6 +820,7 @@ export function FiltersManagerPage() {
       const nextFilterStatus = await apiClient.getFilterStatus(signal);
       if (!signal?.aborted) {
         setFilterStatus(nextFilterStatus);
+        setBackendRevision((current) => getRevision(nextFilterStatus) ?? current);
       }
     } catch (error) {
       if (!signal?.aborted && !(error instanceof ApiError && error.status === 404)) {
@@ -843,6 +863,8 @@ export function FiltersManagerPage() {
         return;
       }
       setCategoryDetail(nextCategory);
+      setBackendRevision((current) => getRevision(nextCategory) ?? current);
+      setRevisionConflict(null);
       setDetailError(null);
     } catch (error) {
       if (!signal?.aborted) {
@@ -896,6 +918,8 @@ export function FiltersManagerPage() {
 
   function selectCategory(categoryId: string) {
     updateManagerState({ selectedCategoryId: categoryId });
+    setCategoryDetail(null);
+    setRevisionConflict(null);
     const nextParams = new URLSearchParams(searchParams);
     nextParams.set("category_id", categoryId);
     setSearchParams(nextParams, { replace: false });
@@ -915,6 +939,7 @@ export function FiltersManagerPage() {
     try {
       const nextSync = await apiClient.syncFilterMap();
       setSyncResponse(nextSync);
+      setBackendRevision((current) => getRevision(nextSync) ?? current);
       await loadCategories();
       if (selectedCategoryId) {
         await loadCategoryDetail(selectedCategoryId);
@@ -927,6 +952,30 @@ export function FiltersManagerPage() {
     }
   }
 
+  function withExpectedRevision<
+    T extends
+      | AddFilterGroupRequest
+      | UpdateFilterGroupRequest
+      | AddFilterValueRequest
+      | UpdateFilterValueRequest,
+  >(payload: T): T {
+    return currentRevision ? { ...payload, expected_revision: currentRevision } : payload;
+  }
+
+  function applyCategoryWriteResult(nextCategory: FilterCategoryDetail) {
+    setCategoryDetail(nextCategory);
+    setBackendRevision((current) => getRevision(nextCategory) ?? current);
+    setRevisionConflict(null);
+    setDetailError(null);
+  }
+
+  async function reloadSelectedCategory() {
+    if (!selectedCategoryId) {
+      return;
+    }
+    await loadCategoryDetail(selectedCategoryId);
+  }
+
   async function handleAddGroup(payload: AddFilterGroupRequest) {
     if (!selectedCategoryId) {
       setAddGroupError("Select a category first.");
@@ -935,12 +984,20 @@ export function FiltersManagerPage() {
 
     setAddGroupError(null);
     try {
-      await apiClient.addFilterGroup(selectedCategoryId, payload);
-      await loadCategoryDetail(selectedCategoryId);
+      const nextCategory = await apiClient.addFilterGroup(
+        selectedCategoryId,
+        withExpectedRevision(payload),
+      );
+      applyCategoryWriteResult(nextCategory);
       await loadCategories();
       return true;
     } catch (error) {
-      setAddGroupError(getErrorMessage(error, "Could not add filter group."));
+      if (isStaleRevisionConflict(error)) {
+        setRevisionConflict(STALE_REVISION_MESSAGE);
+        setAddGroupError(STALE_REVISION_MESSAGE);
+      } else {
+        setAddGroupError(getErrorMessage(error, "Could not add filter group."));
+      }
       return false;
     }
   }
@@ -954,10 +1011,22 @@ export function FiltersManagerPage() {
     setBusy(`group:${groupId}`, true);
     setGroupErrors((current) => ({ ...current, [errorKey]: "" }));
     try {
-      await apiClient.updateFilterGroup(selectedCategoryId, groupId, payload);
-      await loadCategoryDetail(selectedCategoryId);
+      const nextCategory = await apiClient.updateFilterGroup(
+        selectedCategoryId,
+        groupId,
+        withExpectedRevision(payload),
+      );
+      applyCategoryWriteResult(nextCategory);
       await loadCategories();
     } catch (error) {
+      if (isStaleRevisionConflict(error)) {
+        setRevisionConflict(STALE_REVISION_MESSAGE);
+        setGroupErrors((current) => ({
+          ...current,
+          [errorKey]: STALE_REVISION_MESSAGE,
+        }));
+        return;
+      }
       setGroupErrors((current) => ({
         ...current,
         [errorKey]: getErrorMessage(error, "Could not update filter group."),
@@ -976,11 +1045,23 @@ export function FiltersManagerPage() {
     setBusy(`add-value:${groupId}`, true);
     setAddValueErrors((current) => ({ ...current, [errorKey]: "" }));
     try {
-      await apiClient.addFilterValue(selectedCategoryId, groupId, payload);
-      await loadCategoryDetail(selectedCategoryId);
+      const nextCategory = await apiClient.addFilterValue(
+        selectedCategoryId,
+        groupId,
+        withExpectedRevision(payload),
+      );
+      applyCategoryWriteResult(nextCategory);
       await loadCategories();
       return true;
     } catch (error) {
+      if (isStaleRevisionConflict(error)) {
+        setRevisionConflict(STALE_REVISION_MESSAGE);
+        setAddValueErrors((current) => ({
+          ...current,
+          [errorKey]: STALE_REVISION_MESSAGE,
+        }));
+        return false;
+      }
       setAddValueErrors((current) => ({
         ...current,
         [errorKey]: getErrorMessage(error, "Could not add filter value."),
@@ -1004,10 +1085,23 @@ export function FiltersManagerPage() {
     setBusy(`value:${valueId}`, true);
     setValueErrors((current) => ({ ...current, [errorKey]: "" }));
     try {
-      await apiClient.updateFilterValue(selectedCategoryId, groupId, valueId, payload);
-      await loadCategoryDetail(selectedCategoryId);
+      const nextCategory = await apiClient.updateFilterValue(
+        selectedCategoryId,
+        groupId,
+        valueId,
+        withExpectedRevision(payload),
+      );
+      applyCategoryWriteResult(nextCategory);
       await loadCategories();
     } catch (error) {
+      if (isStaleRevisionConflict(error)) {
+        setRevisionConflict(STALE_REVISION_MESSAGE);
+        setValueErrors((current) => ({
+          ...current,
+          [errorKey]: STALE_REVISION_MESSAGE,
+        }));
+        return;
+      }
       setValueErrors((current) => ({
         ...current,
         [errorKey]: getErrorMessage(error, "Could not update filter value."),
@@ -1021,6 +1115,7 @@ export function FiltersManagerPage() {
     resetManagerState();
     setSearchParams({}, { replace: true });
     setCategoryDetail(null);
+    setRevisionConflict(null);
   }
 
   const statusText =
@@ -1063,7 +1158,22 @@ export function FiltersManagerPage() {
         {syncError ? <p className="form-error">{syncError}</p> : null}
         {!backendAvailable ? <p className="muted">Write and sync actions are disabled until the Product-Agent API is reachable.</p> : null}
         {lastLoadedAt ? <p className="muted">Last loaded {lastLoadedAt.toLocaleTimeString()}</p> : null}
+        <p className="muted">Revision {formatRevision(currentRevision)}</p>
       </section>
+
+      {revisionConflict ? (
+        <div className="state-block error-state" role="alert">
+          <span>{revisionConflict}</span>
+          <button
+            className="button secondary"
+            type="button"
+            disabled={!selectedCategoryId || busyActions.has("detail")}
+            onClick={() => void reloadSelectedCategory()}
+          >
+            Reload category
+          </button>
+        </div>
+      ) : null}
 
       <section className="panel">
         <div className="section-heading">
@@ -1075,6 +1185,7 @@ export function FiltersManagerPage() {
         {syncResponse ? (
           <dl className="summary-grid filters-summary-grid">
             <SummaryItem label="Status" value={syncResponse.status} />
+            <SummaryItem label="Revision" value={formatRevision(getRevision(syncResponse))} />
             <SummaryItem label="Filter map" value={syncResponse.filter_map_path} />
             <SummaryItem label="Sync report" value={syncResponse.sync_report_path} />
             <SummaryItem label="Categories" value={syncResponse.category_count} />
