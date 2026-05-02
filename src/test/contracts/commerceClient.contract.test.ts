@@ -90,6 +90,10 @@ describe("commerce API client contract fixtures", () => {
       active_count: sourceUrlSummary.active_count,
       needs_review_count: sourceUrlSummary.needs_review_count,
       by_status: expect.objectContaining({ active: 1 }),
+      products_with_urls_count: sourceUrlSummary.products_with_active_source_urls,
+      products_without_urls_count: sourceUrlSummary.products_without_active_source_urls,
+      by_type: expect.objectContaining({ imported: 1 }),
+      by_source: expect.objectContaining({ bestprice: 1 }),
     });
 
     const body = {

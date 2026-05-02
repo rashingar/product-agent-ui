@@ -144,6 +144,20 @@ export const catalogProducts = {
 };
 
 export const sourceUrlSummary = {
+  source_url_count: 3,
+  catalog_product_count: 2,
+  products_with_active_source_urls: 1,
+  products_without_active_source_urls: 1,
+  by_url_type: {
+    manual: 2,
+    imported: 1,
+    discovered: 0,
+  },
+  by_source_name: {
+    skroutz: 1,
+    bestprice: 1,
+    public: 1,
+  },
   total_count: 3,
   active_count: 1,
   needs_review_count: 1,
@@ -788,9 +802,25 @@ function updateSourceUrlResponse(request: MockRequest) {
     : {};
   return {
     ...sourceUrlsForCatalogProduct.items[0],
+    url: typeof body.url === "string" ? body.url : sourceUrlsForCatalogProduct.items[0].url,
+    url_normalized:
+      typeof body.url === "string" ? body.url.trim().replace(/#.*$/, "") : sourceUrlsForCatalogProduct.items[0].url_normalized,
+    source_name:
+      typeof body.source_name === "string" || body.source_name === null
+        ? body.source_name
+        : sourceUrlsForCatalogProduct.items[0].source_name,
+    source_domain: typeof body.url === "string" && body.url.includes("public.gr") ? "public.gr" : sourceUrlsForCatalogProduct.items[0].source_domain,
     status: typeof body.status === "string" ? body.status : sourceUrlsForCatalogProduct.items[0].status,
     notes: typeof body.notes === "string" || body.notes === null ? body.notes : sourceUrlsForCatalogProduct.items[0].notes,
     updated_at: "2026-05-02T09:20:00Z",
+  };
+}
+
+function promoteSourceUrlResponse() {
+  return {
+    ...sourceUrlsForCatalogProduct.items[1],
+    status: "active",
+    updated_at: "2026-05-02T09:25:00Z",
   };
 }
 
@@ -887,6 +917,7 @@ export const catalogDbImportRequiredFixtureRoutes: MockRoute[] = [
   { method: "GET", path: "/commerce-api/catalog/products/1/source-urls", response: catalogDbImportRequiredError },
   { method: "POST", path: "/commerce-api/catalog/products/1/source-urls", response: catalogDbImportRequiredError },
   { method: "PATCH", path: "/commerce-api/catalog/source-urls/101", response: catalogDbImportRequiredError },
+  { method: "PATCH", path: "/commerce-api/catalog/source-urls/102", response: catalogDbImportRequiredError },
   { method: "POST", path: "/commerce-api/catalog/source-urls/101/validate", response: catalogDbImportRequiredError },
   { method: "GET", path: "/commerce-api/catalog/source-urls/summary", response: catalogDbImportRequiredError },
   { method: "POST", path: "/commerce-api/catalog/source-urls/import/preview", response: catalogDbImportRequiredError },
@@ -911,6 +942,12 @@ export const commerceFixtureRoutes: MockRoute[] = [
     path: "/commerce-api/catalog/source-urls/101",
     requestExample: { status: "disabled" },
     response: updateSourceUrlResponse,
+  },
+  {
+    method: "PATCH",
+    path: "/commerce-api/catalog/source-urls/102",
+    requestExample: { status: "active" },
+    response: promoteSourceUrlResponse,
   },
   { method: "POST", path: "/commerce-api/catalog/source-urls/101/validate", response: sourceUrlValidationBroken },
   { method: "GET", path: "/commerce-api/catalog/source-urls/summary", response: sourceUrlSummary },

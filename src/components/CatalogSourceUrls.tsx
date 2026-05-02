@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import {
-  CommerceApiError,
   commerceClient,
   getCommerceApiErrorMessage,
 } from "../api/commerceClient";
@@ -92,6 +91,22 @@ function SourceUrlSummaryGrid({ summary }: { summary: SourceUrlSummaryResponse |
       <ImportSummaryCard label="Coverage %" value={summary?.coverage_percent} />
     </dl>
   );
+}
+
+function formatPercent(value: number | null | undefined): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}%` : "-";
+}
+
+function formatCoverageSummary(summary: SourceUrlSummaryResponse | null): string {
+  if (!summary) {
+    return "Coverage not loaded";
+  }
+
+  return [
+    `Coverage: ${formatPercent(summary.coverage_percent)}`,
+    `Active URLs: ${(summary.active_count ?? 0).toLocaleString()}`,
+    `Needs review: ${(summary.needs_review_count ?? 0).toLocaleString()}`,
+  ].join(" · ");
 }
 
 function importCounters(result: SourceUrlImportResponse | null) {
@@ -227,6 +242,7 @@ export function SourceUrlImportPanel({
   const [isApplyLoading, setIsApplyLoading] = useState(false);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
   const [previewRequestKey, setPreviewRequestKey] = useState<string | null>(null);
+  const [isExpanded, setIsExpanded] = useState(false);
 
   const loadSummary = useCallback(
     async (signal?: AbortSignal) => {
@@ -327,32 +343,48 @@ export function SourceUrlImportPanel({
     !isApplyLoading;
 
   return (
-    <section className="panel source-url-import-panel">
-      <div className="section-heading">
+    <section className={`panel source-url-import-panel ${isExpanded ? "expanded" : "collapsed"}`}>
+      <div className="source-url-import-header">
         <div>
           <p className="eyebrow">Source URLs</p>
           <h3>Source URL Import</h3>
+          <p className="muted source-url-import-summary-text">{formatCoverageSummary(summary)}</p>
         </div>
-        <button
-          className="button secondary"
-          type="button"
-          onClick={() => void loadSummary()}
-          disabled={disabled || isSummaryLoading}
-        >
-          Refresh coverage
-        </button>
+        <div className="button-row">
+          {isExpanded ? (
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => void loadSummary()}
+              disabled={disabled || isSummaryLoading}
+            >
+              Refresh coverage
+            </button>
+          ) : null}
+          <button
+            className="button secondary"
+            type="button"
+            onClick={() => setIsExpanded((current) => !current)}
+            aria-expanded={isExpanded}
+          >
+            {isExpanded ? "Collapse" : "Expand"}
+          </button>
+        </div>
       </div>
 
       {disabled ? (
         <p className="muted">Source URL import is locked until Catalog database/import readiness is restored.</p>
       ) : null}
 
-      {isSummaryLoading ? <LoadingState label="Loading source URL coverage..." /> : null}
-      {summaryError ? <ErrorState message={summaryError} onRetry={() => void loadSummary()} /> : null}
-      {readinessBlock ? <p className="form-warning">{readinessBlock.message}</p> : null}
-      {!summaryError && !readinessBlock ? <SourceUrlSummaryGrid summary={summary} /> : null}
+      {!isExpanded ? null : (
+        <>
 
-      <div className="filter-grid source-url-import-controls">
+          {isSummaryLoading ? <LoadingState label="Loading source URL coverage..." /> : null}
+          {summaryError ? <ErrorState message={summaryError} onRetry={() => void loadSummary()} /> : null}
+          {readinessBlock ? <p className="form-warning">{readinessBlock.message}</p> : null}
+          {!summaryError && !readinessBlock ? <SourceUrlSummaryGrid summary={summary} /> : null}
+
+          <div className="filter-grid source-url-import-controls">
         <label className="checkbox-row">
           <input
             type="checkbox"
@@ -410,9 +442,9 @@ export function SourceUrlImportPanel({
             disabled={disabled || isPreviewLoading || isApplyLoading}
           />
         </label>
-      </div>
+          </div>
 
-      <div className="toolbar">
+          <div className="toolbar">
         <p className="muted">Apply requires a completed dry-run preview and explicit review confirmation.</p>
         <div className="button-row">
           <button
@@ -432,9 +464,9 @@ export function SourceUrlImportPanel({
             {isApplyLoading ? "Applying..." : "Apply import"}
           </button>
         </div>
-      </div>
+          </div>
 
-      <label className="checkbox-row source-url-confirm-row">
+          <label className="checkbox-row source-url-confirm-row">
         <input
           type="checkbox"
           checked={reviewConfirmed}
@@ -442,23 +474,25 @@ export function SourceUrlImportPanel({
           disabled={disabled || previewResult === null || isApplyLoading}
         />
         I reviewed the dry-run report
-      </label>
+          </label>
 
-      {previewError ? <ErrorState message={previewError} /> : null}
-      {previewResult ? (
-        <div className="state-block source-url-result-block">
-          <strong>Dry-run report</strong>
-          <SourceUrlImportReport result={previewResult} />
-        </div>
-      ) : null}
+          {previewError ? <ErrorState message={previewError} /> : null}
+          {previewResult ? (
+            <div className="state-block source-url-result-block">
+              <strong>Dry-run report</strong>
+              <SourceUrlImportReport result={previewResult} />
+            </div>
+          ) : null}
 
-      {applyError ? <ErrorState message={applyError} /> : null}
-      {applyResult ? (
-        <div className="state-block source-url-result-block">
-          <strong>Applied import report</strong>
-          <SourceUrlImportReport result={applyResult} />
-        </div>
-      ) : null}
+          {applyError ? <ErrorState message={applyError} /> : null}
+          {applyResult ? (
+            <div className="state-block source-url-result-block">
+              <strong>Applied import report</strong>
+              <SourceUrlImportReport result={applyResult} />
+            </div>
+          ) : null}
+        </>
+      )}
     </section>
   );
 }
@@ -467,10 +501,12 @@ export function CatalogSourceUrlManager({
   product,
   disabled,
   refreshToken,
+  onClose,
 }: {
   product: CatalogProduct | null;
   disabled: boolean;
   refreshToken: number;
+  onClose: () => void;
 }) {
   const catalogProductId = product?.catalog_product_id;
   const [items, setItems] = useState<SourceUrl[]>([]);
@@ -482,6 +518,9 @@ export function CatalogSourceUrlManager({
   const [newSourceName, setNewSourceName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | number | null>(null);
+  const [editDraft, setEditDraft] = useState({ url: "", source_name: "", notes: "" });
+  const [editError, setEditError] = useState<string | null>(null);
 
   const canLoad = !disabled && catalogProductId !== null && catalogProductId !== undefined && catalogProductId !== "";
 
@@ -521,6 +560,27 @@ export function CatalogSourceUrlManager({
     void loadItems(controller.signal);
     return () => controller.abort();
   }, [loadItems, refreshToken]);
+
+  useEffect(() => {
+    setEditingId(null);
+    setEditError(null);
+    setValidationMessage(null);
+  }, [catalogProductId]);
+
+  useEffect(() => {
+    if (!product) {
+      return undefined;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        onClose();
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [onClose, product]);
 
   const addUrl = async (event: FormEvent) => {
     event.preventDefault();
@@ -588,21 +648,108 @@ export function CatalogSourceUrlManager({
     }
   };
 
+  const startEdit = (sourceUrl: SourceUrl) => {
+    const id = sourceUrlId(sourceUrl);
+    if (id === null) {
+      return;
+    }
+
+    setEditingId(id);
+    setEditError(null);
+    setEditDraft({
+      url: sourceUrl.url,
+      source_name: sourceUrl.source_name ?? "",
+      notes: sourceUrl.notes ?? "",
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditError(null);
+    setEditDraft({ url: "", source_name: "", notes: "" });
+  };
+
+  const saveEdit = async (sourceUrl: SourceUrl) => {
+    const id = sourceUrlId(sourceUrl);
+    if (id === null || editDraft.url.trim().length === 0) {
+      return;
+    }
+
+    setPendingActionId(id);
+    setEditError(null);
+    try {
+      const updated = await commerceClient.updateCatalogSourceUrl(id, {
+        url: editDraft.url.trim(),
+        source_name: editDraft.source_name.trim() || null,
+        notes: editDraft.notes.trim() || null,
+      });
+      setItems((current) => current.map((item) => (sourceUrlId(item) === id ? updated : item)));
+      cancelEdit();
+    } catch (saveError) {
+      setEditError(readinessMessage(saveError));
+    } finally {
+      setPendingActionId(null);
+    }
+  };
+
   if (!product) {
     return null;
   }
 
   return (
-    <section className="source-url-manager-panel" aria-label="Catalog product source URLs">
-      <div className="section-heading">
-        <div>
-          <p className="eyebrow">Catalog product</p>
-          <h3>Source URLs for {formatValue(product.model)}</h3>
-        </div>
-        <button className="button secondary" type="button" onClick={() => void loadItems()} disabled={!canLoad || isLoading}>
-          Refresh URLs
-        </button>
-      </div>
+    <div className="source-url-drawer-backdrop" onMouseDown={onClose}>
+      <section
+        className="source-url-drawer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="source-url-drawer-title"
+        onMouseDown={(event) => event.stopPropagation()}
+      >
+        <header className="source-url-drawer-header">
+          <div>
+            <p className="eyebrow">Catalog product</p>
+            <h2 id="source-url-drawer-title">Source URLs</h2>
+          </div>
+          <button className="button secondary" type="button" onClick={onClose}>
+            Close
+          </button>
+        </header>
+
+        <div className="source-url-drawer-body">
+          <dl className="source-url-product-summary">
+            <div>
+              <dt>Model</dt>
+              <dd>{formatValue(product.model)}</dd>
+            </div>
+            <div>
+              <dt>Name</dt>
+              <dd>{formatValue(product.name)}</dd>
+            </div>
+            <div>
+              <dt>Manufacturer</dt>
+              <dd>{formatValue(product.manufacturer)}</dd>
+            </div>
+            <div>
+              <dt>MPN</dt>
+              <dd>{formatValue(product.mpn)}</dd>
+            </div>
+            <div>
+              <dt>Catalog product id</dt>
+              <dd>{formatValue(product.catalog_product_id)}</dd>
+            </div>
+          </dl>
+
+          <div className="toolbar source-url-drawer-toolbar">
+            <p className="muted">Manage monitored source URLs attached to this catalog product.</p>
+            <button
+              className="button secondary"
+              type="button"
+              onClick={() => void loadItems()}
+              disabled={!canLoad || isLoading}
+            >
+              Refresh URLs
+            </button>
+          </div>
 
       {disabled ? (
         <p className="muted">Source URL manager is locked until Catalog database/import readiness is restored.</p>
@@ -613,6 +760,7 @@ export function CatalogSourceUrlManager({
       {readinessBlock ? <p className="form-warning">{readinessBlock.message}</p> : null}
       {isLoading ? <LoadingState label="Loading source URLs..." /> : null}
       {error ? <ErrorState message={error} onRetry={() => void loadItems()} /> : null}
+      {editError ? <ErrorState message={editError} /> : null}
       {validationMessage ? <p className="muted">{validationMessage}</p> : null}
 
       <form className="source-url-add-form" onSubmit={(event) => void addUrl(event)}>
@@ -663,14 +811,62 @@ export function CatalogSourceUrlManager({
               items.map((sourceUrl, index) => {
                 const id = sourceUrlId(sourceUrl);
                 const isPending = pendingActionId !== null && pendingActionId === id;
+                const isEditing = editingId !== null && editingId === id;
                 return (
                   <tr key={`${id ?? sourceUrl.url}-${index}`}>
-                    <td>{formatValue(sourceUrl.source_name)}</td>
+                    <td>
+                      {isEditing ? (
+                        <input
+                          className="table-input"
+                          type="text"
+                          value={editDraft.source_name}
+                          onChange={(event) =>
+                            setEditDraft((current) => ({ ...current, source_name: event.target.value }))
+                          }
+                          disabled={isPending}
+                          aria-label={`Edit source for ${sourceUrl.url}`}
+                        />
+                      ) : (
+                        formatValue(sourceUrl.source_name)
+                      )}
+                    </td>
                     <td>{formatValue(sourceUrl.source_domain)}</td>
                     <td className="source-url-cell">
-                      <a href={sourceUrl.url} target="_blank" rel="noreferrer">
-                        {sourceUrl.url}
-                      </a>
+                      {isEditing ? (
+                        <div className="source-url-edit-form">
+                          <label>
+                            URL
+                            <textarea
+                              value={editDraft.url}
+                              onChange={(event) =>
+                                setEditDraft((current) => ({ ...current, url: event.target.value }))
+                              }
+                              disabled={isPending}
+                              aria-label={`Edit URL for ${sourceUrl.url}`}
+                            />
+                          </label>
+                          <label>
+                            Notes
+                            <textarea
+                              value={editDraft.notes}
+                              onChange={(event) =>
+                                setEditDraft((current) => ({ ...current, notes: event.target.value }))
+                              }
+                              disabled={isPending}
+                              aria-label={`Edit notes for ${sourceUrl.url}`}
+                            />
+                          </label>
+                        </div>
+                      ) : (
+                        <>
+                          <a href={sourceUrl.url} target="_blank" rel="noreferrer">
+                            {sourceUrl.url}
+                          </a>
+                          {sourceUrl.url_normalized && sourceUrl.url_normalized !== sourceUrl.url ? (
+                            <span className="artifact-path">Normalized: {sourceUrl.url_normalized}</span>
+                          ) : null}
+                        </>
+                      )}
                     </td>
                     <td>
                       <span className={`status-badge ${sourceUrlStatusClass(sourceUrl.status)}`}>
@@ -685,43 +881,74 @@ export function CatalogSourceUrlManager({
                     <td>{formatValue(sourceUrl.last_error)}</td>
                     <td>
                       <div className="button-row source-url-actions">
-                        <button
-                          className="button secondary compact-button"
-                          type="button"
-                          onClick={() => void validateUrl(sourceUrl)}
-                          disabled={disabled || isPending || id === null}
-                        >
-                          Validate
-                        </button>
-                        {sourceUrl.status === "active" ? (
-                          <button
-                            className="button secondary compact-button"
-                            type="button"
-                            onClick={() => void updateStatus(sourceUrl, "disabled")}
-                            disabled={disabled || isPending || id === null}
-                          >
-                            Disable
-                          </button>
+                        {isEditing ? (
+                          <>
+                            <button
+                              className="button primary compact-button"
+                              type="button"
+                              onClick={() => void saveEdit(sourceUrl)}
+                              disabled={disabled || isPending || id === null || editDraft.url.trim().length === 0}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="button secondary compact-button"
+                              type="button"
+                              onClick={cancelEdit}
+                              disabled={isPending}
+                            >
+                              Cancel
+                            </button>
+                          </>
                         ) : (
-                          <button
-                            className="button secondary compact-button"
-                            type="button"
-                            onClick={() => void updateStatus(sourceUrl, "active")}
-                            disabled={disabled || isPending || id === null}
-                          >
-                            {sourceUrl.status === "needs_review" ? "Promote to active" : "Reactivate"}
-                          </button>
+                          <>
+                            <button
+                              className="button secondary compact-button"
+                              type="button"
+                              onClick={() => startEdit(sourceUrl)}
+                              disabled={disabled || isPending || id === null}
+                            >
+                              Edit
+                            </button>
+                            <button
+                              className="button secondary compact-button"
+                              type="button"
+                              onClick={() => void validateUrl(sourceUrl)}
+                              disabled={disabled || isPending || id === null}
+                            >
+                              Validate
+                            </button>
+                            {sourceUrl.status === "active" ? (
+                              <button
+                                className="button secondary compact-button"
+                                type="button"
+                                onClick={() => void updateStatus(sourceUrl, "disabled")}
+                                disabled={disabled || isPending || id === null}
+                              >
+                                Disable
+                              </button>
+                            ) : (
+                              <button
+                                className="button secondary compact-button"
+                                type="button"
+                                onClick={() => void updateStatus(sourceUrl, "active")}
+                                disabled={disabled || isPending || id === null}
+                              >
+                                {sourceUrl.status === "needs_review" ? "Promote to active" : "Reactivate"}
+                              </button>
+                            )}
+                            {sourceUrl.status !== "needs_review" ? (
+                              <button
+                                className="button secondary compact-button"
+                                type="button"
+                                onClick={() => void updateStatus(sourceUrl, "needs_review")}
+                                disabled={disabled || isPending || id === null}
+                              >
+                                Mark needs_review
+                              </button>
+                            ) : null}
+                          </>
                         )}
-                        {sourceUrl.status !== "needs_review" ? (
-                          <button
-                            className="button secondary compact-button"
-                            type="button"
-                            onClick={() => void updateStatus(sourceUrl, "needs_review")}
-                            disabled={disabled || isPending || id === null}
-                          >
-                            Mark needs_review
-                          </button>
-                        ) : null}
                       </div>
                     </td>
                   </tr>
@@ -735,6 +962,8 @@ export function CatalogSourceUrlManager({
           </tbody>
         </table>
       </div>
-    </section>
+        </div>
+      </section>
+    </div>
   );
 }

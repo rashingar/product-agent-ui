@@ -53,43 +53,21 @@ describe("platform mocked page smoke tests", () => {
     expect(screen.getByText("Αφυγραντήρες")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Source URLs for 005606" })).toBeInTheDocument();
     await expect(screen.findByText("Source URL Import")).resolves.toBeInTheDocument();
-    await expect(screen.findByText("Total URLs")).resolves.toBeInTheDocument();
+    await expect(screen.findByText(/Coverage:/)).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview import" })).not.toBeInTheDocument();
   });
 
-  it("opens Catalog source URL manager and supports add and validate flows", async () => {
-    installMockFetch(allRoutes);
-
-    renderWithRouter("/catalog");
-
-    fireEvent.click(await screen.findByRole("button", { name: "Source URLs for 005606" }));
-
-    await expect(screen.findByRole("heading", { name: "Source URLs for 005606" })).resolves.toBeInTheDocument();
-    await expect(screen.findByText("https://www.skroutz.gr/s/123/midea-md-20l.html")).resolves.toBeInTheDocument();
-    expect(screen.getByText("needs review")).toBeInTheDocument();
-
-    fireEvent.change(screen.getByLabelText("Manual URL"), {
-      target: { value: "https://www.public.gr/product/midea-md-20l" },
-    });
-    fireEvent.change(screen.getByLabelText("Source"), {
-      target: { value: "public" },
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Add URL" }));
-
-    await expect(screen.findByText("https://www.public.gr/product/midea-md-20l")).resolves.toBeInTheDocument();
-    expect(screen.getAllByText("active").length).toBeGreaterThan(0);
-
-    fireEvent.click(screen.getAllByRole("button", { name: "Validate" })[1]);
-
-    await expect(screen.findAllByText("URL returned HTTP 404.")).resolves.not.toHaveLength(0);
-    await expect(screen.findAllByText("broken")).resolves.not.toHaveLength(0);
-  });
-
-  it("previews and applies source URL imports only after confirmation", async () => {
+  it("expands source URL import and keeps apply guarded by preview and confirmation", async () => {
     installMockFetch(allRoutes);
 
     renderWithRouter("/catalog");
 
     await expect(screen.findByText("Source URL Import")).resolves.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Preview import" })).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
+
+    await expect(screen.findByText("Total URLs")).resolves.toBeInTheDocument();
     const applyButton = screen.getByRole("button", { name: "Apply import" });
     expect(applyButton).toBeDisabled();
 
@@ -108,6 +86,67 @@ describe("platform mocked page smoke tests", () => {
     expect(screen.getAllByText("Imported").length).toBeGreaterThan(0);
   });
 
+  it("opens and closes the Catalog source URL drawer with product context", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Source URLs for 005606" }));
+
+    let drawer = await screen.findByRole("dialog", { name: "Source URLs" });
+    expect(drawer).toBeInTheDocument();
+    expect(within(drawer).getByText("005606")).toBeInTheDocument();
+    expect(within(drawer).getByText("Midea Αφυγραντήρας 20L")).toBeInTheDocument();
+    expect(within(drawer).getByText("Midea")).toBeInTheDocument();
+    expect(within(drawer).getByText("MD-20L")).toBeInTheDocument();
+    expect(within(drawer).getByText("1")).toBeInTheDocument();
+    await expect(within(drawer).findByText("https://www.skroutz.gr/s/123/midea-md-20l.html")).resolves.toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Close" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Source URLs" })).not.toBeInTheDocument());
+  });
+
+  it("supports adding validating editing and promoting source URLs in the drawer", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Source URLs for 005606" }));
+    let drawer = await screen.findByRole("dialog", { name: "Source URLs" });
+    await expect(within(drawer).findByText("https://www.skroutz.gr/s/123/midea-md-20l.html")).resolves.toBeInTheDocument();
+    expect(within(drawer).getByText("needs review")).toBeInTheDocument();
+    expect(within(drawer).getByRole("button", { name: "Promote to active" })).toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getAllByRole("button", { name: "Edit" })[0]);
+    fireEvent.change(within(drawer).getByLabelText(/Edit URL for https:\/\/www\.skroutz\.gr/), {
+      target: { value: "https://www.public.gr/product/midea-md-20l-edited" },
+    });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Save" }));
+
+    drawer = await screen.findByRole("dialog", { name: "Source URLs" });
+    await expect(within(drawer).findByText("https://www.public.gr/product/midea-md-20l-edited")).resolves.toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getByRole("button", { name: "Promote to active" }));
+    drawer = await screen.findByRole("dialog", { name: "Source URLs" });
+    await waitFor(() => expect(within(drawer).queryByRole("button", { name: "Promote to active" })).not.toBeInTheDocument());
+    expect(within(drawer).getAllByText("active").length).toBeGreaterThan(1);
+
+    fireEvent.change(within(drawer).getByLabelText("Manual URL"), {
+      target: { value: "https://www.public.gr/product/midea-md-20l" },
+    });
+    fireEvent.change(within(drawer).getByLabelText("Source"), {
+      target: { value: "public" },
+    });
+    fireEvent.click(within(drawer).getByRole("button", { name: "Add URL" }));
+
+    await expect(within(drawer).findByText("https://www.public.gr/product/midea-md-20l")).resolves.toBeInTheDocument();
+
+    fireEvent.click(within(drawer).getAllByRole("button", { name: "Validate" })[1]);
+
+    await expect(screen.findAllByText("URL returned HTTP 404.")).resolves.not.toHaveLength(0);
+    await expect(screen.findAllByText("broken")).resolves.not.toHaveLength(0);
+  });
+
   it("shows Catalog database/import-required state for structured Catalog 503 responses", async () => {
     installMockFetch([...catalogDbImportRequiredFixtureRoutes, ...allRoutes]);
 
@@ -121,6 +160,7 @@ describe("platform mocked page smoke tests", () => {
     expect(screen.queryByText(/Commerce API unreachable/)).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Preview selection" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Create price monitoring run" })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Expand" }));
     expect(screen.getByRole("button", { name: "Preview import" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Apply import" })).toBeDisabled();
     expect(screen.getByText("Source URL import is locked until Catalog database/import readiness is restored.")).toBeInTheDocument();

@@ -258,12 +258,12 @@ npm run preview
 - This is a UI-only repo. Backend job logic stays in the backend.
 - The Catalog tab can browse commerce catalog products and preview/create Price Monitoring
   selection runs.
-- The Catalog tab also includes a Source URL Manager per catalog product. Products with
-  `catalog_product_id` can list, add, validate, disable/reactivate, and promote source URLs.
-  Imported `needs_review` URLs are visible but are not active monitoring inputs until promoted.
-- The Catalog Source URL Import panel supports coverage summary, dry-run preview, and guarded
-  apply. Apply is enabled only after a successful preview and the operator confirms the dry-run
-  report was reviewed.
+- The Catalog tab also includes a Source URL Manager drawer per catalog product. Products with
+  `catalog_product_id` can list, add, edit, validate, disable/reactivate, and promote source URLs.
+  Imported `needs_review` URLs are visible and can be promoted to active with one action.
+- The Catalog Source URL Import panel is collapsed by default. When expanded it supports coverage
+  summary, dry-run preview, and guarded apply. Apply is enabled only after a successful preview and
+  the operator confirms the dry-run report was reviewed.
 - Catalog uses the commerce backend, requires PostgreSQL and an imported active catalog, and shows
   a Catalog database/import required state when that readiness fails.
 - `sourceCata.csv` is imported into PostgreSQL by the backend. It is not read live by the Catalog

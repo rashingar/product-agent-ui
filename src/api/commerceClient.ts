@@ -404,11 +404,12 @@ function normalizeNumberRecord(value: unknown): Record<string, number> {
 function normalizeSourceUrlSummary(payload: unknown): SourceUrlSummaryResponse {
   const source = isRecord(payload) ? payload : {};
   const statusCounters = normalizeNumberRecord(source.by_status);
-  const typeCounters = normalizeNumberRecord(source.by_type);
+  const typeCounters = normalizeNumberRecord(source.by_type ?? source.by_url_type);
+  const sourceCounters = normalizeNumberRecord(source.by_source ?? source.by_source_name);
 
   return {
     ...source,
-    total_count: normalizeCounter(source.total_count ?? source.total ?? source.count),
+    total_count: normalizeCounter(source.total_count ?? source.source_url_count ?? source.total ?? source.count),
     active_count: normalizeCounter(source.active_count ?? statusCounters.active),
     needs_review_count: normalizeCounter(source.needs_review_count ?? statusCounters.needs_review),
     broken_count: normalizeCounter(source.broken_count ?? statusCounters.broken),
@@ -417,12 +418,20 @@ function normalizeSourceUrlSummary(payload: unknown): SourceUrlSummaryResponse {
     manual_count: normalizeCounter(source.manual_count ?? typeCounters.manual),
     imported_count: normalizeCounter(source.imported_count ?? typeCounters.imported),
     discovered_count: normalizeCounter(source.discovered_count ?? typeCounters.discovered),
-    products_with_urls_count: normalizeCounter(source.products_with_urls_count ?? source.products_with_urls),
-    products_without_urls_count: normalizeCounter(source.products_without_urls_count ?? source.products_without_urls),
+    products_with_urls_count: normalizeCounter(
+      source.products_with_urls_count ??
+        source.products_with_urls ??
+        source.products_with_active_source_urls,
+    ),
+    products_without_urls_count: normalizeCounter(
+      source.products_without_urls_count ??
+        source.products_without_urls ??
+        source.products_without_active_source_urls,
+    ),
     coverage_percent: normalizeOptionalNumber(source.coverage_percent),
     by_status: statusCounters,
     by_type: typeCounters,
-    by_source: normalizeNumberRecord(source.by_source),
+    by_source: sourceCounters,
   };
 }
 

@@ -1373,12 +1373,6 @@ export function CatalogPage() {
               </table>
             </div>
 
-            <CatalogSourceUrlManager
-              product={sourceUrlProduct}
-              disabled={isCatalogLocked}
-              refreshToken={sourceUrlRefreshToken}
-            />
-
             <div className="pagination-row">
               <button
                 className="button secondary"
@@ -1403,6 +1397,12 @@ export function CatalogPage() {
           </>
         ) : null}
       </section>
+      <CatalogSourceUrlManager
+        product={sourceUrlProduct}
+        disabled={isCatalogLocked}
+        refreshToken={sourceUrlRefreshToken}
+        onClose={() => setSourceUrlProduct(null)}
+      />
     </div>
   );
 }
