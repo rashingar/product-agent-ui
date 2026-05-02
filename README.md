@@ -17,6 +17,23 @@ The Product-Agent UI expects these local endpoints from the Product-Agent API:
 - `GET /api/jobs/{job_id}/logs`
 - `GET /api/jobs/{job_id}/artifacts`
 
+The staged Product-Agent workflow shell also uses the newer authoring, filter review, and
+settings endpoints when they are available:
+
+- `GET /api/authoring/{model}`
+- `POST /api/authoring/{model}/intro-text`
+- `POST /api/authoring/{model}/intro-text/retry`
+- `POST /api/authoring/{model}/seo-meta`
+- `POST /api/authoring/{model}/seo-meta/retry`
+- `GET /api/filter-review/{model}`
+- `PUT /api/filter-review/{model}`
+- `POST /api/filter-review/{model}/approve`
+- `GET /api/settings`
+- `PATCH /api/settings`
+
+The workflow shell intentionally includes only product-specific filter review editing and a
+small authoring defaults panel. The full global Filters Manager UI is not included here.
+
 Job creation responses should include either `job_id` or `id`. The UI also accepts common wrapped shapes such as `{ "job": { ... } }`, `{ "data": { ... } }`, and `{ "result": { ... } }`.
 
 Stop is available for queued/running-like jobs. `POST /api/jobs/{job_id}/stop` marks the

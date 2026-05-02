@@ -12,6 +12,7 @@ const platformNavItems = [
 ];
 
 const productAgentNavItems = [
+  { to: "/product-agent", label: "Workflow" },
   { to: "/pipeline", label: "Pipeline" },
   { to: "/prepare", label: "Prepare" },
   { to: "/render", label: "Render" },

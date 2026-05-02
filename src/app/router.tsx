@@ -11,6 +11,7 @@ import { PrepareJobPage } from "../pages/PrepareJobPage";
 import { PriceMonitoringAlertsPage } from "../pages/PriceMonitoringAlertsPage";
 import { PriceMonitoringExecutionsPage } from "../pages/PriceMonitoringExecutionsPage";
 import { PriceMonitoringPage } from "../pages/PriceMonitoringPage";
+import { ProductAgentWorkflowPage } from "../pages/ProductAgentWorkflowPage";
 import { PublishJobPage } from "../pages/PublishJobPage";
 import { RenderJobPage } from "../pages/RenderJobPage";
 
@@ -25,7 +26,7 @@ export const router = createBrowserRouter([
       { path: "price-monitoring", element: <PriceMonitoringPage /> },
       { path: "price-monitoring/executions", element: <PriceMonitoringExecutionsPage /> },
       { path: "price-monitoring/alerts", element: <PriceMonitoringAlertsPage /> },
-      { path: "product-agent", element: <JobsPage /> },
+      { path: "product-agent", element: <ProductAgentWorkflowPage /> },
       { path: "pipeline", element: <PipelineJobPage /> },
       { path: "prepare", element: <PrepareJobPage /> },
       { path: "render", element: <RenderJobPage /> },

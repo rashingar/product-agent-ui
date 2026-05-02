@@ -614,6 +614,10 @@ textarea {
   min-width: 1900px;
 }
 
+.filter-review-table-wrap table {
+  min-width: 1320px;
+}
+
 .observation-table-wrap table {
   min-width: 1810px;
 }
@@ -1032,6 +1036,71 @@ code {
   padding: 12px;
 }
 
+.workflow-stage {
+  align-content: start;
+}
+
+.workflow-stage h4,
+.stage-job-panel h4,
+.stage-card h4 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.stage-card,
+.stage-job-panel,
+.stage-job-assets {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.stage-card,
+.stage-job-panel {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcfc;
+}
+
+.workflow-summary-grid {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.stage-job-assets details {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+
+.stage-job-assets summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.missing-required-input {
+  border-color: #f2b8b5;
+  background: #fff7f6;
+}
+
+.workflow-checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+}
+
+.workflow-checkbox-row input {
+  width: 18px;
+  height: 18px;
+}
+
+.settings-mini-form {
+  gap: 14px;
+}
+
 .pipeline-stage-main {
   display: grid;
   min-width: 0;
@@ -1165,6 +1234,7 @@ code {
   .csv-metadata-grid,
   .diagnostics-summary-grid,
   .alert-summary-grid,
+  .workflow-summary-grid,
   .artifact-preview-meta,
   .column-controls-panel,
   .filter-grid,

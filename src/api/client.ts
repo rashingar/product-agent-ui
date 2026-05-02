@@ -1,9 +1,12 @@
 import type {
   Artifact,
+  AuthoringStatus,
+  FilterReview,
   HealthResponse,
   Job,
   LogEntry,
   PrepareJobRequest,
+  ProductAgentSettings,
   PublishJobRequest,
   RenderJobRequest,
   StopJobRequest,
@@ -43,6 +46,13 @@ function getPayloadMessage(payload: unknown): string | null {
     return payload;
   }
 
+  if (Array.isArray(payload)) {
+    const messages = payload
+      .map((item) => getPayloadMessage(item))
+      .filter((message): message is string => Boolean(message));
+    return messages.length > 0 ? messages.join("; ") : null;
+  }
+
   if (!isRecord(payload)) {
     return null;
   }
@@ -52,6 +62,21 @@ function getPayloadMessage(payload: unknown): string | null {
     if (typeof value === "string" && value.trim().length > 0) {
       return value;
     }
+
+    const nestedMessage = getPayloadMessage(value);
+    if (nestedMessage) {
+      return nestedMessage;
+    }
+  }
+
+  const validationMessages = Object.entries(payload)
+    .flatMap(([key, value]) => {
+      const message = getPayloadMessage(value);
+      return message ? [`${key}: ${message}`] : [];
+    })
+    .slice(0, 6);
+  if (validationMessages.length > 0) {
+    return validationMessages.join("; ");
   }
 
   return null;
@@ -178,6 +203,11 @@ function normalizeArtifacts(payload: unknown): Artifact[] {
     : [];
 }
 
+function normalizeRecord<T extends Record<string, unknown>>(payload: unknown, keys: string[]): T {
+  const unwrapped = unwrapRecord(payload, keys);
+  return isRecord(unwrapped) ? (unwrapped as T) : ({} as T);
+}
+
 export const apiClient = {
   apiBaseUrl,
 
@@ -235,6 +265,89 @@ export const apiClient = {
   async getJobArtifacts(jobId: string, signal?: AbortSignal): Promise<Artifact[]> {
     return normalizeArtifacts(
       await request<unknown>(`/api/jobs/${encodeURIComponent(jobId)}/artifacts`, { signal }),
+    );
+  },
+
+  async getAuthoringStatus(model: string, signal?: AbortSignal): Promise<AuthoringStatus> {
+    return normalizeRecord<AuthoringStatus>(
+      await request<unknown>(`/api/authoring/${encodeURIComponent(model)}`, { signal }),
+      ["authoring", "status", "data", "result"],
+    );
+  },
+
+  async runIntroText(model: string): Promise<AuthoringStatus> {
+    return normalizeRecord<AuthoringStatus>(
+      await request<unknown>(`/api/authoring/${encodeURIComponent(model)}/intro-text`, {
+        method: "POST",
+      }),
+      ["authoring", "status", "data", "result"],
+    );
+  },
+
+  async retryIntroText(model: string): Promise<AuthoringStatus> {
+    return normalizeRecord<AuthoringStatus>(
+      await request<unknown>(`/api/authoring/${encodeURIComponent(model)}/intro-text/retry`, {
+        method: "POST",
+      }),
+      ["authoring", "status", "data", "result"],
+    );
+  },
+
+  async runSeoMeta(model: string): Promise<AuthoringStatus> {
+    return normalizeRecord<AuthoringStatus>(
+      await request<unknown>(`/api/authoring/${encodeURIComponent(model)}/seo-meta`, {
+        method: "POST",
+      }),
+      ["authoring", "status", "data", "result"],
+    );
+  },
+
+  async retrySeoMeta(model: string): Promise<AuthoringStatus> {
+    return normalizeRecord<AuthoringStatus>(
+      await request<unknown>(`/api/authoring/${encodeURIComponent(model)}/seo-meta/retry`, {
+        method: "POST",
+      }),
+      ["authoring", "status", "data", "result"],
+    );
+  },
+
+  async getFilterReview(model: string, signal?: AbortSignal): Promise<FilterReview> {
+    return normalizeRecord<FilterReview>(
+      await request<unknown>(`/api/filter-review/${encodeURIComponent(model)}`, { signal }),
+      ["review", "filter_review", "data", "result"],
+    );
+  },
+
+  async saveFilterReview(model: string, body: FilterReview): Promise<FilterReview> {
+    return normalizeRecord<FilterReview>(
+      await request<unknown>(`/api/filter-review/${encodeURIComponent(model)}`, {
+        method: "PUT",
+        body,
+      }),
+      ["review", "filter_review", "data", "result"],
+    );
+  },
+
+  async approveFilterReview(model: string): Promise<FilterReview> {
+    return normalizeRecord<FilterReview>(
+      await request<unknown>(`/api/filter-review/${encodeURIComponent(model)}/approve`, {
+        method: "POST",
+      }),
+      ["review", "filter_review", "data", "result"],
+    );
+  },
+
+  async getSettings(signal?: AbortSignal): Promise<ProductAgentSettings> {
+    return normalizeRecord<ProductAgentSettings>(
+      await request<unknown>("/api/settings", { signal }),
+      ["settings", "data", "result"],
+    );
+  },
+
+  async patchSettings(body: ProductAgentSettings): Promise<ProductAgentSettings> {
+    return normalizeRecord<ProductAgentSettings>(
+      await request<unknown>("/api/settings", { method: "PATCH", body }),
+      ["settings", "data", "result"],
     );
   },
 };
