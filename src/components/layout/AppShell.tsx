@@ -13,6 +13,7 @@ const platformNavItems = [
 
 const productAgentNavItems = [
   { to: "/product-agent", label: "Workflow" },
+  { to: "/product-agent/filters", label: "Filters Manager" },
   { to: "/pipeline", label: "Pipeline" },
   { to: "/prepare", label: "Prepare" },
   { to: "/render", label: "Render" },
@@ -22,6 +23,7 @@ const productAgentNavItems = [
 
 const productAgentPaths = new Set([
   "/product-agent",
+  "/product-agent/filters",
   "/pipeline",
   "/prepare",
   "/render",
@@ -38,7 +40,9 @@ const priceMonitoringNavItems = [
 export function AppShell() {
   const location = useLocation();
   const isProductAgentSection =
-    productAgentPaths.has(location.pathname) || location.pathname.startsWith("/jobs/");
+    productAgentPaths.has(location.pathname) ||
+    location.pathname.startsWith("/product-agent/") ||
+    location.pathname.startsWith("/jobs/");
   const isPriceMonitoringSection = location.pathname.startsWith("/price-monitoring");
 
   return (
@@ -75,6 +79,7 @@ export function AppShell() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === "/product-agent"}
               className={({ isActive }) => (isActive ? "subnav-link active" : "subnav-link")}
             >
               {item.label}

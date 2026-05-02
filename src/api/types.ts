@@ -166,3 +166,103 @@ export interface ProductAgentSettings {
   };
   [key: string]: unknown;
 }
+
+export type FilterManagerStatus = "active" | "inactive" | "deprecated";
+export type FilterManagerSource = "base" | "manual" | "merged" | string;
+
+export interface FilterCategoryListItem {
+  category_id: string | number;
+  path?: string | string[] | null;
+  parent_category?: string | null;
+  leaf_category?: string | null;
+  sub_category?: string | null;
+  key?: string | null;
+  group_count?: number | null;
+  active_group_count?: number | null;
+  required_group_count?: number | null;
+  inactive_group_count?: number | null;
+  deprecated_group_count?: number | null;
+  source?: FilterManagerSource | null;
+  [key: string]: unknown;
+}
+
+export interface FilterCategoryDetail {
+  category_id: string | number;
+  path?: string | string[] | null;
+  parent_category?: string | null;
+  leaf_category?: string | null;
+  sub_category?: string | null;
+  key?: string | null;
+  source?: FilterManagerSource | null;
+  groups?: FilterGroup[];
+  [key: string]: unknown;
+}
+
+export interface FilterGroup {
+  group_id: string | number;
+  name?: string | null;
+  required?: boolean;
+  status?: FilterManagerStatus | string | null;
+  source?: FilterManagerSource | null;
+  values?: FilterValue[];
+  [key: string]: unknown;
+}
+
+export interface FilterValue {
+  value_id: string | number;
+  value?: string | null;
+  status?: FilterManagerStatus | string | null;
+  source?: FilterManagerSource | null;
+  [key: string]: unknown;
+}
+
+export interface AddFilterGroupRequest {
+  name: string;
+  required: boolean;
+  status: FilterManagerStatus;
+}
+
+export interface UpdateFilterGroupRequest {
+  name?: string;
+  required?: boolean;
+  status?: FilterManagerStatus;
+}
+
+export interface AddFilterValueRequest {
+  value: string;
+  status: FilterManagerStatus;
+}
+
+export interface UpdateFilterValueRequest {
+  value?: string;
+  status?: FilterManagerStatus;
+}
+
+export interface FilterSyncResponse {
+  status?: string;
+  filter_map_path?: string | null;
+  sync_report_path?: string | null;
+  category_count?: number | null;
+  group_count?: number | null;
+  value_count?: number | null;
+  warning_count?: number | null;
+  overridden_group_count?: number | null;
+  overridden_value_count?: number | null;
+  [key: string]: unknown;
+}
+
+export interface FilterSyncReport {
+  mode?: string | null;
+  base_path?: string | null;
+  manual_overrides_path?: string | null;
+  filter_map_path?: string | null;
+  warnings?: unknown[];
+  overridden_groups?: unknown[];
+  overridden_values?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface FilterManagerStatusResponse {
+  status?: string;
+  [key: string]: unknown;
+}

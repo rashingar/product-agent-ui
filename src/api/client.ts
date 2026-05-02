@@ -1,7 +1,14 @@
 import type {
   Artifact,
   AuthoringStatus,
+  AddFilterGroupRequest,
+  AddFilterValueRequest,
+  FilterCategoryDetail,
+  FilterCategoryListItem,
+  FilterManagerStatusResponse,
   FilterReview,
+  FilterSyncReport,
+  FilterSyncResponse,
   HealthResponse,
   Job,
   LogEntry,
@@ -10,6 +17,8 @@ import type {
   PublishJobRequest,
   RenderJobRequest,
   StopJobRequest,
+  UpdateFilterGroupRequest,
+  UpdateFilterValueRequest,
 } from "./types";
 import { withJobStage } from "./jobUtils";
 
@@ -208,6 +217,15 @@ function normalizeRecord<T extends Record<string, unknown>>(payload: unknown, ke
   return isRecord(unwrapped) ? (unwrapped as T) : ({} as T);
 }
 
+function normalizeRecordList<T extends Record<string, unknown>>(
+  payload: unknown,
+  keys: string[],
+): T[] {
+  const unwrapped = unwrapRecord(payload, keys);
+  const list = Array.isArray(unwrapped) ? unwrapped : unwrapRecord(unwrapped, keys);
+  return Array.isArray(list) ? (list.filter(isRecord) as T[]) : [];
+}
+
 export const apiClient = {
   apiBaseUrl,
 
@@ -348,6 +366,114 @@ export const apiClient = {
     return normalizeRecord<ProductAgentSettings>(
       await request<unknown>("/api/settings", { method: "PATCH", body }),
       ["settings", "data", "result"],
+    );
+  },
+
+  async listFilterCategories(signal?: AbortSignal): Promise<FilterCategoryListItem[]> {
+    return normalizeRecordList<FilterCategoryListItem>(
+      await request<unknown>("/api/filters/categories", { signal }),
+      ["categories", "items", "data", "results"],
+    );
+  },
+
+  async getFilterCategory(
+    categoryId: string | number,
+    signal?: AbortSignal,
+  ): Promise<FilterCategoryDetail> {
+    return normalizeRecord<FilterCategoryDetail>(
+      await request<unknown>(`/api/filters/categories/${encodeURIComponent(String(categoryId))}`, {
+        signal,
+      }),
+      ["category", "data", "result"],
+    );
+  },
+
+  async addFilterGroup(
+    categoryId: string | number,
+    body: AddFilterGroupRequest,
+  ): Promise<FilterCategoryDetail> {
+    return normalizeRecord<FilterCategoryDetail>(
+      await request<unknown>(
+        `/api/filters/categories/${encodeURIComponent(String(categoryId))}/groups`,
+        {
+          method: "PUT",
+          body,
+        },
+      ),
+      ["category", "group", "data", "result"],
+    );
+  },
+
+  async updateFilterGroup(
+    categoryId: string | number,
+    groupId: string | number,
+    body: UpdateFilterGroupRequest,
+  ): Promise<FilterCategoryDetail> {
+    return normalizeRecord<FilterCategoryDetail>(
+      await request<unknown>(
+        `/api/filters/categories/${encodeURIComponent(String(categoryId))}/groups/${encodeURIComponent(String(groupId))}`,
+        {
+          method: "PATCH",
+          body,
+        },
+      ),
+      ["category", "group", "data", "result"],
+    );
+  },
+
+  async addFilterValue(
+    categoryId: string | number,
+    groupId: string | number,
+    body: AddFilterValueRequest,
+  ): Promise<FilterCategoryDetail> {
+    return normalizeRecord<FilterCategoryDetail>(
+      await request<unknown>(
+        `/api/filters/categories/${encodeURIComponent(String(categoryId))}/groups/${encodeURIComponent(String(groupId))}/values`,
+        {
+          method: "PUT",
+          body,
+        },
+      ),
+      ["category", "value", "data", "result"],
+    );
+  },
+
+  async updateFilterValue(
+    categoryId: string | number,
+    groupId: string | number,
+    valueId: string | number,
+    body: UpdateFilterValueRequest,
+  ): Promise<FilterCategoryDetail> {
+    return normalizeRecord<FilterCategoryDetail>(
+      await request<unknown>(
+        `/api/filters/categories/${encodeURIComponent(String(categoryId))}/groups/${encodeURIComponent(String(groupId))}/values/${encodeURIComponent(String(valueId))}`,
+        {
+          method: "PATCH",
+          body,
+        },
+      ),
+      ["category", "value", "data", "result"],
+    );
+  },
+
+  async syncFilterMap(): Promise<FilterSyncResponse> {
+    return normalizeRecord<FilterSyncResponse>(
+      await request<unknown>("/api/filters/sync", { method: "POST" }),
+      ["sync", "report", "data", "result"],
+    );
+  },
+
+  async getFilterSyncReport(signal?: AbortSignal): Promise<FilterSyncReport> {
+    return normalizeRecord<FilterSyncReport>(
+      await request<unknown>("/api/filters/sync-report", { signal }),
+      ["report", "sync_report", "data", "result"],
+    );
+  },
+
+  async getFilterStatus(signal?: AbortSignal): Promise<FilterManagerStatusResponse> {
+    return normalizeRecord<FilterManagerStatusResponse>(
+      await request<unknown>("/api/filters/status", { signal }),
+      ["filters", "status", "data", "result"],
     );
   },
 };

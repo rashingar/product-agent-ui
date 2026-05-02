@@ -32,7 +32,23 @@ settings endpoints when they are available:
 - `PATCH /api/settings`
 
 The workflow shell intentionally includes only product-specific filter review editing and a
-small authoring defaults panel. The full global Filters Manager UI is not included here.
+small authoring defaults panel. Global category filter management lives in the separate
+Filters Manager page.
+
+The Filters Manager uses stable backend IDs to manage global category filter groups and
+values. Greek category paths are display data only; they are not used as route parameters.
+
+- `GET /api/filters/categories`
+- `GET /api/filters/categories/{category_id}`
+- `PUT /api/filters/categories/{category_id}/groups`
+- `PATCH /api/filters/categories/{category_id}/groups/{group_id}`
+- `PUT /api/filters/categories/{category_id}/groups/{group_id}/values`
+- `PATCH /api/filters/categories/{category_id}/groups/{group_id}/values/{value_id}`
+- `POST /api/filters/sync`
+- `GET /api/filters/sync-report`
+
+Filters Manager v1 does not include delete UI or DELETE calls. Operators should use
+`inactive` or `deprecated` statuses instead of deleting groups or values.
 
 Job creation responses should include either `job_id` or `id`. The UI also accepts common wrapped shapes such as `{ "job": { ... } }`, `{ "data": { ... } }`, and `{ "result": { ... } }`.
 

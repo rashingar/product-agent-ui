@@ -3,6 +3,7 @@ import { AppShell } from "../components/layout/AppShell";
 import { CatalogPage } from "../pages/CatalogPage";
 import { CsvBridgePage } from "../pages/CsvBridgePage";
 import { DashboardPage } from "../pages/DashboardPage";
+import { FiltersManagerPage } from "../pages/FiltersManagerPage";
 import { JobDetailPage } from "../pages/JobDetailPage";
 import { JobsPage } from "../pages/JobsPage";
 import { NotFoundPage } from "../pages/NotFoundPage";
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: "price-monitoring/executions", element: <PriceMonitoringExecutionsPage /> },
       { path: "price-monitoring/alerts", element: <PriceMonitoringAlertsPage /> },
       { path: "product-agent", element: <ProductAgentWorkflowPage /> },
+      { path: "product-agent/filters", element: <FiltersManagerPage /> },
       { path: "pipeline", element: <PipelineJobPage /> },
       { path: "prepare", element: <PrepareJobPage /> },
       { path: "render", element: <RenderJobPage /> },

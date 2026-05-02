@@ -618,6 +618,10 @@ textarea {
   min-width: 1320px;
 }
 
+.filters-values-table-wrap table {
+  min-width: 760px;
+}
+
 .observation-table-wrap table {
   min-width: 1810px;
 }
@@ -1101,6 +1105,73 @@ code {
   gap: 14px;
 }
 
+.filters-manager-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.filters-browser-panel,
+.filters-detail-panel,
+.filters-groups-list,
+.filters-values-block {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.filters-category-list {
+  display: grid;
+  max-height: 720px;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.filters-category-button.active {
+  border-color: var(--accent);
+  background: var(--active-bg);
+}
+
+.filters-category-counts {
+  overflow-wrap: anywhere;
+}
+
+.filters-manager-filter-grid {
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 180px);
+}
+
+.filters-group-edit-grid {
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 180px) minmax(120px, 150px) auto;
+  align-items: end;
+}
+
+.filters-inline-form,
+.filters-value-form {
+  gap: 12px;
+}
+
+.filters-value-form {
+  grid-template-columns: minmax(180px, 1fr) minmax(140px, 180px) auto;
+  align-items: end;
+}
+
+.filters-value-form label {
+  min-width: 0;
+}
+
+.filters-subdued-card,
+.filters-subdued-row {
+  opacity: 0.72;
+}
+
+.filters-subdued-card {
+  background: #f6f7f8;
+}
+
 .pipeline-stage-main {
   display: grid;
   min-width: 0;
@@ -1237,8 +1308,12 @@ code {
   .workflow-summary-grid,
   .artifact-preview-meta,
   .column-controls-panel,
-  .filter-grid,
-  .browser-layout,
+    .filter-grid,
+    .filters-manager-layout,
+    .filters-manager-filter-grid,
+    .filters-group-edit-grid,
+    .filters-value-form,
+    .browser-layout,
   .save-grid,
   .split-grid {
     grid-template-columns: 1fr;
