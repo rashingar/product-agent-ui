@@ -895,6 +895,121 @@ textarea {
   min-width: 1380px;
 }
 
+.source-url-candidates-page .page-header {
+  max-width: 860px;
+}
+
+.source-url-candidate-filters {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.source-url-candidates-table-wrap table {
+  min-width: 2320px;
+}
+
+.source-url-candidates-table-wrap th,
+.source-url-candidates-table-wrap td {
+  padding: 10px 8px;
+  font-size: 13px;
+}
+
+.candidate-url-actions,
+.source-url-candidate-actions,
+.source-url-replace-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.source-url-candidate-actions {
+  min-width: 540px;
+}
+
+.source-url-replace-row {
+  align-items: center;
+  margin-top: 8px;
+}
+
+.source-url-replace-row .table-input {
+  min-width: 260px;
+}
+
+.source-url-candidate-drawer {
+  width: min(980px, 94vw);
+}
+
+.candidate-product-summary {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.candidate-detail-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px;
+  background: #fbfcfc;
+}
+
+.candidate-detail-card h3 {
+  margin: 0;
+  font-size: 17px;
+}
+
+.candidate-detail-list,
+.candidate-evidence-grid {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+
+.candidate-detail-list {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.candidate-detail-list div,
+.candidate-evidence-section {
+  min-width: 0;
+}
+
+.candidate-detail-list dt,
+.candidate-evidence-section dt {
+  margin-bottom: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.candidate-detail-list dd,
+.candidate-evidence-section dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.candidate-evidence-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.candidate-evidence-section {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--surface);
+}
+
+.candidate-raw-evidence summary {
+  width: fit-content;
+  cursor: pointer;
+  font-weight: 800;
+}
+
+.compact-json-block {
+  max-height: 260px;
+  padding: 10px;
+  font-size: 12px;
+}
+
 .source-url-cell {
   max-width: 360px;
   overflow-wrap: anywhere;
@@ -1507,6 +1622,10 @@ code {
   .source-url-summary-grid,
   .source-url-import-summary-grid,
   .source-url-product-summary,
+  .source-url-candidate-filters,
+  .candidate-product-summary,
+  .candidate-detail-list,
+  .candidate-evidence-grid,
   .csv-metadata-grid,
   .diagnostics-summary-grid,
   .alert-summary-grid,

@@ -51,6 +51,10 @@ describe("commerce API client contract fixtures", () => {
           url: sourceUrlsForCatalogProduct.items[0].url,
           status: "active",
           url_type: "manual",
+          product_source_id: 1001,
+          capture_status: "success",
+          source_capture_snapshot_id: 9001,
+          full_snapshot_ref: expect.objectContaining({ path: "source-captures/9001/full-snapshot.json" }),
         }),
         expect.objectContaining({
           id: 102,
@@ -101,24 +105,27 @@ describe("commerce API client contract fixtures", () => {
       include_observations: true,
       include_artifacts: true,
       include_legacy_runs: false,
-      report_item_limit: 200,
+      report_items_limit: 200,
     };
 
     await expect(commerceClient.previewSourceUrlImport(body)).resolves.toMatchObject({
       apply: false,
+      applied: false,
       summary: expect.objectContaining({
-        candidates_found: sourceUrlImportPreview.candidates_found,
-        would_import_count: sourceUrlImportPreview.imported_count,
+        candidates_found: sourceUrlImportPreview.summary.candidates_found,
+        would_import_count: sourceUrlImportPreview.summary.would_import_count,
       }),
       report_items: expect.arrayContaining([
         expect.objectContaining({ action: "created", status: "active", model: "005606" }),
       ]),
+      sources: expect.objectContaining({ observations: expect.objectContaining({ candidates_found: 2 }) }),
     });
 
     await expect(commerceClient.applySourceUrlImport(body)).resolves.toMatchObject({
       apply: true,
+      applied: true,
       summary: expect.objectContaining({
-        imported_count: sourceUrlImportApply.imported_count,
+        imported_count: sourceUrlImportApply.summary.imported_count,
       }),
       changed_source_urls: expect.arrayContaining([
         expect.objectContaining({ action: "created" }),
@@ -299,6 +306,19 @@ describe("commerce API client contract fixtures", () => {
   it("normalizes run list run detail fetch status and execution history", async () => {
     installMockFetch(commerceFixtureRoutes);
 
+    await expect(commerceClient.previewPriceMonitoringSelection({ source: "skroutz" })).resolves.toMatchObject({
+      source_url_coverage: expect.objectContaining({
+        products_with_active_source_urls: 1,
+        products_without_active_source_urls: 1,
+      }),
+      selected_items: expect.arrayContaining([
+        expect.objectContaining({
+          model: "005606",
+          source_url_coverage: expect.objectContaining({ has_active_source_url: true }),
+        }),
+      ]),
+    });
+
     const runs = await commerceClient.listPriceMonitoringRuns();
     expect(runs[0]).toMatchObject({
       run_id: "pm-run-001",
@@ -313,6 +333,23 @@ describe("commerce API client contract fixtures", () => {
     await expect(commerceClient.getPriceMonitoringFetch("pm-run-001")).resolves.toMatchObject({
       execution_id: "exec-success",
       status: "succeeded",
+      appended_observation_count: 2,
+      prior_observation_count: 1,
+      was_refetch: true,
+      observation_batch_id: "exec-success",
+    });
+
+    await expect(commerceClient.getPriceMonitoringRunObservations("pm-run-001")).resolves.toMatchObject({
+      count: 2,
+      items: expect.arrayContaining([
+        expect.objectContaining({
+          execution_id: "exec-success",
+          fetch_attempt: 2,
+          was_refetch: true,
+          product_source_id: 1001,
+          source_capture_snapshot_id: 9001,
+        }),
+      ]),
     });
 
     const executions = await commerceClient.listPriceMonitoringFetchExecutions("pm-run-001");

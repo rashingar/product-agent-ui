@@ -16,6 +16,7 @@ import { PriceMonitoringPage } from "../pages/PriceMonitoringPage";
 import { ProductAgentWorkflowPage } from "../pages/ProductAgentWorkflowPage";
 import { PublishJobPage } from "../pages/PublishJobPage";
 import { RenderJobPage } from "../pages/RenderJobPage";
+import { SourceUrlCandidatesPage } from "../pages/SourceUrlCandidatesPage";
 
 const routes = [
   {
@@ -24,6 +25,7 @@ const routes = [
     children: [
       { index: true, element: <DashboardPage /> },
       { path: "catalog", element: <CatalogPage /> },
+      { path: "catalog/source-url-candidates", element: <SourceUrlCandidatesPage /> },
       { path: "csv-bridge", element: <CsvBridgePage /> },
       { path: "price-monitoring", element: <PriceMonitoringPage /> },
       { path: "price-monitoring/executions", element: <PriceMonitoringExecutionsPage /> },

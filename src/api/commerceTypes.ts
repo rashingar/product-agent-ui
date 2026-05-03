@@ -36,6 +36,7 @@ export interface SourceUrl {
   id?: number | string | null;
   source_url_id?: number | string | null;
   catalog_product_id?: number | string | null;
+  product_source_id?: number | string | null;
   catalog_source?: string | null;
   model?: string | null;
   mpn?: string | null;
@@ -54,6 +55,18 @@ export interface SourceUrl {
   last_failed_at?: string | null;
   failure_count?: number | null;
   last_error?: string | null;
+  capture_status?: string | null;
+  last_fetch_status?: string | null;
+  last_capture_status?: string | null;
+  last_capture_strategy?: string | null;
+  last_capture_at?: string | null;
+  last_fetched_at?: string | null;
+  last_capture_snapshot_id?: number | string | null;
+  source_capture_snapshot_id?: number | string | null;
+  artifact_ref?: ArtifactPayload | string | null;
+  artifact_refs?: ArtifactItem[];
+  snapshot_ref?: ArtifactPayload | string | null;
+  full_snapshot_ref?: ArtifactPayload | string | null;
   created_at?: string | null;
   updated_at?: string | null;
   [key: string]: unknown;
@@ -94,6 +107,8 @@ export interface SourceUrlListResponse {
 }
 
 export interface SourceUrlSummaryResponse {
+  catalog_source?: string | null;
+  catalog_product_count?: number;
   total_count?: number;
   active_count?: number;
   needs_review_count?: number;
@@ -109,6 +124,7 @@ export interface SourceUrlSummaryResponse {
   by_status?: Record<string, number>;
   by_type?: Record<string, number>;
   by_source?: Record<string, number>;
+  updated_at?: string | null;
   [key: string]: unknown;
 }
 
@@ -119,6 +135,7 @@ export interface SourceUrlImportRequest {
   include_legacy_runs?: boolean;
   legacy_runs_dir?: string | null;
   limit?: number | null;
+  report_items_limit?: number | null;
   report_item_limit?: number | null;
   [key: string]: unknown;
 }
@@ -159,8 +176,12 @@ export interface SourceUrlImportCandidateReport {
 }
 
 export interface SourceUrlImportResponse extends SourceUrlImportSummary {
+  applied?: boolean;
   apply: boolean;
+  mode?: string | null;
   summary: SourceUrlImportSummary;
+  sources?: Record<string, Record<string, number>>;
+  items?: SourceUrlImportCandidateReport[];
   sources_processed: string[];
   warnings: string[];
   skipped_reasons: Record<string, number>;
@@ -178,6 +199,79 @@ export interface SourceUrlImportOptionsResponse {
   legacy_runs_dirs: string[];
   default_catalog_source?: string | null;
   [key: string]: unknown;
+}
+
+export type SourceUrlCandidateStatus =
+  | "needs_review"
+  | "accepted"
+  | "rejected"
+  | "not_found"
+  | "error";
+
+export type SourceUrlCandidateReviewDecision =
+  | "accept"
+  | "reject"
+  | "replace_url"
+  | "not_found"
+  | "needs_manual_review";
+
+export interface SourceUrlCandidate {
+  id: number | string;
+  run_id?: number | string | null;
+  catalog_product_id?: number | string | null;
+  model?: string | null;
+  mpn?: string | null;
+  manufacturer?: string | null;
+  product_name?: string | null;
+  category?: string | null;
+  own_price?: number | string | null;
+  source_name?: string | null;
+  source_domain?: string | null;
+  source_type?: string | null;
+  expected_listing?: string | boolean | null;
+  candidate_url?: string | null;
+  canonical_url?: string | null;
+  candidate_title?: string | null;
+  candidate_price?: number | string | null;
+  match_status?: string | null;
+  confidence_score?: number | string | null;
+  match_method?: string | null;
+  evidence_json?: unknown;
+  competing_candidates_count?: number | string | null;
+  searched_queries_json?: unknown;
+  status?: SourceUrlCandidateStatus | string | null;
+  reviewed_by?: string | null;
+  reviewed_at?: string | null;
+  notes?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  [key: string]: unknown;
+}
+
+export interface SourceUrlCandidateListParams {
+  status?: SourceUrlCandidateStatus | "all" | string | null;
+  source_name?: string | null;
+  run_id?: string | number | null;
+  model?: string | null;
+  catalog_product_id?: string | number | null;
+  min_confidence?: string | number | null;
+  max_confidence?: string | number | null;
+  limit?: number;
+  offset?: number;
+}
+
+export interface SourceUrlCandidateListResponse {
+  items: SourceUrlCandidate[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SourceUrlCandidateReviewBody {
+  decision: SourceUrlCandidateReviewDecision;
+  reviewed_url: string | null;
+  review_notes: string | null;
+  reviewed_by: string | null;
 }
 
 export interface CatalogProductsResponse {
@@ -281,12 +375,34 @@ export interface PriceMonitoringSelectionItem {
   model?: string;
   name?: string;
   mpn?: string | null;
+  catalog_product_id?: number | string | null;
   category?: string | null;
   raw_category?: string | null;
   family?: string | null;
   category_name?: string | null;
   sub_category?: string | null;
   manufacturer?: string | null;
+  source_url_coverage?: PriceMonitoringSourceUrlCoverage | null;
+  [key: string]: unknown;
+}
+
+export interface PriceMonitoringSourceUrlCoverage {
+  source?: PriceMonitoringSource | string | null;
+  selected_count?: number;
+  products_with_active_source_urls?: number;
+  products_without_active_source_urls?: number;
+  coverage_percent?: number | null;
+  active_source_url_count?: number;
+  needs_review_source_url_count?: number;
+  broken_source_url_count?: number;
+  disabled_source_url_count?: number;
+  redirected_source_url_count?: number;
+  missing_source_url_models?: string[];
+  missing_source_url_catalog_product_ids?: Array<number | string>;
+  has_active_source_url?: boolean;
+  status_counts?: Record<string, number>;
+  active_source_urls?: SourceUrl[];
+  warning?: string | null;
   [key: string]: unknown;
 }
 
@@ -304,6 +420,7 @@ export interface PriceMonitoringSelectionResult {
   selected?: PriceMonitoringSelectionItem[];
   skipped_reasons?: Record<string, unknown>;
   skipped_items?: PriceMonitoringSelectionItem[];
+  source_url_coverage?: PriceMonitoringSourceUrlCoverage | null;
   [key: string]: unknown;
 }
 
@@ -320,6 +437,7 @@ export interface PriceMonitoringRun {
   selected_count?: number;
   skipped_count?: number;
   skipped_by_reason?: Record<string, number>;
+  source_url_coverage?: PriceMonitoringSourceUrlCoverage | null;
   created_at?: string | null;
   updated_at?: string | null;
   latest_fetch?: FetchPriceMonitoringResult | null;
@@ -366,12 +484,17 @@ export interface FetchPriceMonitoringResult {
   warnings?: string[];
   error?: string | null;
   observation_count?: number;
+  appended_observation_count?: number;
+  prior_observation_count?: number;
+  retained_observation_count?: number;
   replaced_observation_count?: number;
   catalog_snapshot_count?: number | null;
   matched_observation_count?: number;
   unmatched_observation_count?: number;
   was_refetch?: boolean;
   fetch_attempt?: number;
+  observation_batch_id?: string | number | null;
+  observation_history_count?: number;
   persistence_status?: "not_configured" | "persisted" | "failed" | "unknown" | string | null;
   persistence_warnings?: string[];
   alert_evaluation_status?: string | null;
@@ -415,25 +538,47 @@ export type PriceObservationMatchStatus = "matched" | "unmatched";
 export interface PriceObservation {
   id?: number | string;
   product_id?: number | string | null;
+  product_source_id?: number | string | null;
+  source_url_id?: number | string | null;
+  vendor_id?: number | string | null;
+  source_capture_snapshot_id?: number | string | null;
   run_id?: string | number | null;
+  execution_id?: string | number | null;
+  fetch_attempt?: number | string | null;
+  was_refetch?: boolean | null;
+  observation_batch_id?: string | number | null;
   catalog_source?: string | null;
   source?: string | null;
   model?: string | null;
   mpn?: string | null;
   product_name?: string | null;
   competitor_name?: string | null;
+  seller_name?: string | null;
   competitor_price?: number | string | null;
+  original_price?: number | string | null;
+  discount_percent?: number | string | null;
   own_price?: number | string | null;
   price_delta?: number | string | null;
   price_delta_percent?: number | string | null;
   currency?: string | null;
   availability?: string | null;
+  stock_status?: string | null;
+  shipping_cost?: number | string | null;
+  delivery_text?: string | null;
   product_url?: string | null;
   matched_by?: "model" | "mpn" | string | null;
   match_status?: PriceObservationMatchStatus | string | null;
   is_matched?: boolean | null;
   observed_at?: string | null;
+  fetched_at?: string | null;
+  parsed_at?: string | null;
+  timestamp_source?: string | null;
+  timestamp_quality?: string | null;
   created_at?: string | null;
+  artifact_ref?: ArtifactPayload | string | null;
+  artifact_refs?: ArtifactItem[];
+  snapshot_ref?: ArtifactPayload | string | null;
+  full_snapshot_ref?: ArtifactPayload | string | null;
   raw_observation?: Record<string, unknown> | null;
   [key: string]: unknown;
 }

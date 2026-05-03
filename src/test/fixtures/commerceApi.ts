@@ -193,6 +193,7 @@ export const sourceUrlsForCatalogProduct = {
   items: [
     {
       id: 101,
+      product_source_id: 1001,
       catalog_product_id: 1,
       catalog_source: "sourceCata",
       model: "005606",
@@ -212,6 +213,19 @@ export const sourceUrlsForCatalogProduct = {
       last_failed_at: null,
       failure_count: 0,
       last_error: null,
+      capture_status: "success",
+      last_capture_status: "success",
+      last_capture_strategy: "scheduled-test",
+      last_capture_at: "2026-05-02T08:05:00Z",
+      last_capture_snapshot_id: 9001,
+      source_capture_snapshot_id: 9001,
+      full_snapshot_ref: {
+        name: "source-capture-9001.json",
+        path: "source-captures/9001/full-snapshot.json",
+        is_allowed: true,
+        can_read: true,
+        can_download: true,
+      },
       created_at: "2026-05-02T08:00:00Z",
       updated_at: "2026-05-02T08:00:00Z",
     },
@@ -241,6 +255,22 @@ export const sourceUrlsForCatalogProduct = {
     },
   ],
   count: 2,
+};
+
+export const sourceUrlCoverage = {
+  source: "skroutz",
+  selected_count: 2,
+  products_with_active_source_urls: 1,
+  products_without_active_source_urls: 1,
+  coverage_percent: 50,
+  active_source_url_count: 1,
+  needs_review_source_url_count: 1,
+  broken_source_url_count: 0,
+  disabled_source_url_count: 0,
+  redirected_source_url_count: 0,
+  missing_source_url_models: ["AB-123"],
+  missing_source_url_catalog_product_ids: [2],
+  warning: "Fetch will use active source URLs when available; products without active URLs may fall back to source search.",
 };
 
 export const createdSourceUrl = {
@@ -299,29 +329,33 @@ export const sourceUrlValidationBroken = {
 };
 
 export const sourceUrlImportPreview = {
-  apply: false,
-  candidates_found: 4,
-  imported_count: 2,
-  updated_count: 1,
-  skipped_count: 1,
-  active_count: 2,
-  needs_review_count: 1,
-  invalid_url_count: 0,
-  duplicate_count: 1,
-  unresolved_identity_count: 0,
-  ambiguous_identity_count: 1,
+  mode: "preview",
+  applied: false,
+  summary: {
+    candidates_found: 4,
+    imported_count: 2,
+    updated_count: 1,
+    skipped_count: 1,
+    active_count: 2,
+    needs_review_count: 1,
+    invalid_url_count: 0,
+    duplicate_count: 1,
+    unresolved_identity_count: 0,
+    ambiguous_identity_count: 1,
+    would_import_count: 2,
+    would_update_count: 1,
+  },
   warnings: ["Ambiguous identity for artifact row model MIXED-001."],
-  sources_processed: ["observations", "artifacts"],
   skipped_reasons: {
     ambiguous_identity: 1,
   },
   changed_source_urls: [],
-  source_stats: {
+  sources: {
     observations: { candidates_found: 2 },
     artifacts: { candidates_found: 2 },
   },
   candidate_evidence: [],
-  report_items: [
+  items: [
     {
       action: "created",
       status: "active",
@@ -371,14 +405,13 @@ export const sourceUrlImportPreview = {
       source_url_id: null,
     },
   ],
-  report_truncated: false,
+  truncated: false,
 };
 
 export const sourceUrlImportApply = {
   ...sourceUrlImportPreview,
-  apply: true,
-  imported_count: 2,
-  updated_count: 1,
+  mode: "apply",
+  applied: true,
   changed_source_urls: [
     {
       action: "created",
@@ -389,6 +422,80 @@ export const sourceUrlImportApply = {
       },
     },
   ],
+};
+
+export const sourceUrlCandidates = {
+  items: [
+    {
+      id: 501,
+      run_id: "source-run-001",
+      catalog_product_id: 1,
+      model: "005606",
+      mpn: "MD-20L",
+      manufacturer: "Midea",
+      product_name: "Midea Αφυγραντήρας 20L",
+      category: "Αφυγραντήρες",
+      own_price: 199.9,
+      source_name: "skroutz",
+      source_domain: "skroutz.gr",
+      source_type: "marketplace",
+      expected_listing: true,
+      candidate_url: "https://www.skroutz.gr/s/999/midea-md-20l-candidate.html",
+      canonical_url: "https://www.skroutz.gr/s/999/midea-md-20l-candidate.html",
+      candidate_title: "Midea MD-20L Αφυγραντήρας 20L",
+      candidate_price: 189.9,
+      match_status: "strong_match",
+      confidence_score: 0.9823,
+      match_method: "mpn_model_title",
+      evidence_json: {
+        mpn_evidence: { expected: "MD-20L", found: true },
+        model_evidence: { expected: "005606", found: true },
+        brand_evidence: { expected: "Midea", found: true },
+        category_evidence: { expected: "Αφυγραντήρες", found: true },
+        price_evidence: { own_price: 199.9, candidate_price: 189.9 },
+        title_similarity: 0.94,
+        title_only: false,
+      },
+      competing_candidates_count: 2,
+      searched_queries_json: ["Midea MD-20L", "005606 Midea"],
+      status: "needs_review",
+      reviewed_by: null,
+      reviewed_at: null,
+      notes: "High confidence candidate.",
+      created_at: "2026-05-02T10:00:00Z",
+      updated_at: "2026-05-02T10:00:00Z",
+    },
+    {
+      id: 502,
+      run_id: "source-run-001",
+      catalog_product_id: 2,
+      model: "AB-123",
+      mpn: null,
+      manufacturer: "ΓΕΡΜΑΝΟΣ",
+      product_name: "Σετ πληκτρολόγιο και ποντίκι",
+      category: "Πληκτρολόγια",
+      own_price: 39.9,
+      source_name: "bestprice",
+      source_domain: "bestprice.gr",
+      candidate_url: "https://www.bestprice.gr/item/999/keyboard-mouse.html",
+      candidate_title: "Keyboard mouse bundle",
+      candidate_price: 38.9,
+      match_status: "weak_match",
+      confidence_score: 0.6211,
+      match_method: "title_only",
+      evidence_json: {
+        title_similarity: 0.52,
+        title_only: true,
+        error_code: null,
+      },
+      searched_queries_json: ["AB-123 keyboard"],
+      status: "needs_review",
+      created_at: "2026-05-02T10:20:00Z",
+    },
+  ],
+  total: 2,
+  limit: 50,
+  offset: 0,
 };
 
 export const catalogProductsEmptyImportWarning = {
@@ -531,6 +638,16 @@ export const priceMonitoringExecutions = [
         warning: null,
       },
     ],
+    observation_count: 2,
+    appended_observation_count: 2,
+    prior_observation_count: 1,
+    catalog_snapshot_count: 2,
+    matched_observation_count: 1,
+    unmatched_observation_count: 1,
+    was_refetch: true,
+    fetch_attempt: 2,
+    observation_batch_id: "exec-success",
+    observation_history_count: 3,
     stale: false,
     queue_position: null,
   },
@@ -576,6 +693,7 @@ export const priceMonitoringRunItems = [
       source: "skroutz",
       selected_count: 2,
       skipped_count: 0,
+      source_url_coverage: sourceUrlCoverage,
       created_at: "2026-05-02T08:00:00Z",
       latest_fetch: priceMonitoringExecutions[1],
     },
@@ -585,6 +703,17 @@ export const priceMonitoringRunItems = [
       source: "bestprice",
       selected_count: 1,
       skipped_count: 0,
+      source_url_coverage: {
+        ...sourceUrlCoverage,
+        source: "bestprice",
+        selected_count: 1,
+        products_with_active_source_urls: 1,
+        products_without_active_source_urls: 0,
+        coverage_percent: 100,
+        missing_source_url_models: [],
+        missing_source_url_catalog_product_ids: [],
+        warning: null,
+      },
       created_at: "2026-05-02T09:00:00Z",
       latest_fetch: {
         run_id: "pm-run-queued",
@@ -607,12 +736,118 @@ export const priceMonitoringRunDetail = {
   source: "skroutz",
   selected_count: 2,
   skipped_count: 0,
+  source_url_coverage: sourceUrlCoverage,
   created_at: "2026-05-02T08:00:00Z",
   latest_fetch: priceMonitoringExecutions[1],
   db: {
     persisted: true,
     reachable: true,
   },
+};
+
+export const priceMonitoringSelectionResult = {
+  run_id: "pm-run-001",
+  status: "selection_created",
+  source: "skroutz",
+  output_dir: "price-monitoring/pm-run-001",
+  input_csv_path: "price-monitoring/pm-run-001/input.csv",
+  selection_summary_path: "price-monitoring/pm-run-001/selection-summary.json",
+  selected_count: 2,
+  skipped_count: 0,
+  skipped_by_reason: {},
+  source_url_coverage: sourceUrlCoverage,
+  selected_items: [
+    {
+      ...catalogProducts.items[0],
+      source_url_coverage: {
+        source: "skroutz",
+        has_active_source_url: true,
+        active_source_url_count: 1,
+        status_counts: { active: 1, needs_review: 1, broken: 0, disabled: 0, redirected: 0 },
+        active_source_urls: [sourceUrlsForCatalogProduct.items[0]],
+      },
+    },
+    {
+      ...catalogProducts.items[1],
+      source_url_coverage: {
+        source: "skroutz",
+        has_active_source_url: false,
+        active_source_url_count: 0,
+        status_counts: { active: 0, needs_review: 0, broken: 0, disabled: 0, redirected: 0 },
+        active_source_urls: [],
+        warning: "No active skroutz source URLs for this product.",
+      },
+    },
+  ],
+};
+
+(priceMonitoringSelectionResult as { items?: unknown }).items = priceMonitoringSelectionResult.selected_items;
+
+export const priceMonitoringRunObservations = {
+  run_id: "pm-run-001",
+  items: [
+    {
+      id: 301,
+      product_id: 1,
+      product_source_id: 1001,
+      source_capture_snapshot_id: 9001,
+      run_id: "pm-run-001",
+      execution_id: "exec-success",
+      fetch_attempt: 2,
+      was_refetch: true,
+      observation_batch_id: "exec-success",
+      catalog_source: "sourceCata",
+      source: "skroutz",
+      model: "005606",
+      mpn: "MD-20L",
+      product_name: "Midea Αφυγραντήρας 20L",
+      competitor_name: "Mock Store",
+      competitor_price: 189.9,
+      own_price: 199.9,
+      price_delta: -10,
+      price_delta_percent: -5,
+      currency: "EUR",
+      availability: "available",
+      product_url: "https://www.skroutz.gr/s/123/midea-md-20l.html",
+      matched_by: "model",
+      match_status: "matched",
+      is_matched: true,
+      observed_at: "2026-05-02T08:09:00Z",
+      created_at: "2026-05-02T08:10:00Z",
+      raw_observation: { persistence: { fetch_attempt: 2, was_refetch: true, execution_id: "exec-success" } },
+    },
+    {
+      id: 300,
+      product_id: 1,
+      run_id: "pm-run-001",
+      execution_id: "exec-old",
+      fetch_attempt: 1,
+      was_refetch: false,
+      observation_batch_id: "exec-old",
+      catalog_source: "sourceCata",
+      source: "skroutz",
+      model: "005606",
+      mpn: "MD-20L",
+      product_name: "Midea Αφυγραντήρας 20L",
+      competitor_name: "Older Store",
+      competitor_price: 199.9,
+      own_price: 199.9,
+      price_delta: 0,
+      price_delta_percent: 0,
+      currency: "EUR",
+      availability: "available",
+      product_url: "https://www.skroutz.gr/s/old/midea-md-20l.html",
+      matched_by: "model",
+      match_status: "matched",
+      is_matched: true,
+      observed_at: "2026-05-02T07:09:00Z",
+      created_at: "2026-05-02T07:10:00Z",
+      raw_observation: { persistence: { fetch_attempt: 1, was_refetch: false, execution_id: "exec-old" } },
+    },
+  ],
+  count: 2,
+  matched_count: 2,
+  unmatched_count: 0,
 };
 
 export const priceMonitoringFetchLogs = {
@@ -824,6 +1059,54 @@ function promoteSourceUrlResponse() {
   };
 }
 
+function sourceUrlCandidatesResponse(request: MockRequest) {
+  const status = request.searchParams.get("status");
+  const sourceName = request.searchParams.get("source_name");
+  const items = sourceUrlCandidates.items.filter((candidate) => {
+    const matchesStatus = !status || candidate.status === status;
+    const matchesSource =
+      !sourceName || candidate.source_name.toLowerCase().includes(sourceName.toLowerCase());
+    return matchesStatus && matchesSource;
+  });
+
+  return {
+    items,
+    total: items.length,
+    limit: Number(request.searchParams.get("limit") ?? 50),
+    offset: Number(request.searchParams.get("offset") ?? 0),
+  };
+}
+
+function reviewSourceUrlCandidateResponse(request: MockRequest) {
+  const body =
+    typeof request.body === "object" && request.body !== null && !Array.isArray(request.body)
+      ? (request.body as Record<string, unknown>)
+      : {};
+  const decision = typeof body.decision === "string" ? body.decision : "needs_manual_review";
+  const status =
+    decision === "accept"
+      ? "accepted"
+      : decision === "reject"
+        ? "rejected"
+        : decision === "not_found"
+          ? "not_found"
+          : "needs_review";
+
+  return {
+    ...sourceUrlCandidates.items[0],
+    candidate_url:
+      decision === "replace_url" && typeof body.reviewed_url === "string"
+        ? body.reviewed_url
+        : sourceUrlCandidates.items[0].candidate_url,
+    status,
+    reviewed_by: body.reviewed_by ?? "operator",
+    reviewed_at: "2026-05-02T11:00:00Z",
+    notes:
+      typeof body.review_notes === "string" ? body.review_notes : sourceUrlCandidates.items[0].notes,
+    updated_at: "2026-05-02T11:00:00Z",
+  };
+}
+
 export const commerceDbUnavailableError = {
   status: 503,
   body: {
@@ -951,6 +1234,18 @@ export const commerceFixtureRoutes: MockRoute[] = [
   },
   { method: "POST", path: "/commerce-api/catalog/source-urls/101/validate", response: sourceUrlValidationBroken },
   { method: "GET", path: "/commerce-api/catalog/source-urls/summary", response: sourceUrlSummary },
+  { method: "GET", path: "/commerce-api/catalog/source-url-agent/candidates", response: sourceUrlCandidatesResponse },
+  {
+    method: "PATCH",
+    path: "/commerce-api/catalog/source-url-agent/candidates/501/review",
+    requestExample: {
+      decision: "accept",
+      reviewed_url: null,
+      review_notes: "High confidence candidate.",
+      reviewed_by: "operator",
+    },
+    response: reviewSourceUrlCandidateResponse,
+  },
   {
     method: "POST",
     path: "/commerce-api/catalog/source-urls/import/preview",
@@ -960,7 +1255,7 @@ export const commerceFixtureRoutes: MockRoute[] = [
       include_artifacts: true,
       include_legacy_runs: false,
       limit: 100,
-      report_item_limit: 200,
+      report_items_limit: 200,
     },
     response: sourceUrlImportPreview,
   },
@@ -973,11 +1268,23 @@ export const commerceFixtureRoutes: MockRoute[] = [
       include_artifacts: true,
       include_legacy_runs: false,
       limit: 100,
-      report_item_limit: 200,
+      report_items_limit: 200,
     },
     response: sourceUrlImportApply,
   },
   { method: "GET", path: "/commerce-api/price-monitoring/db/status", response: dbStatusAvailable },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/selection/preview",
+    requestExample: { source: "skroutz", selected_models: ["005606", "AB-123"], dry_run: true },
+    response: priceMonitoringSelectionResult,
+  },
+  {
+    method: "POST",
+    path: "/commerce-api/price-monitoring/runs",
+    requestExample: { source: "skroutz", selected_models: ["005606", "AB-123"], dry_run: false },
+    response: priceMonitoringSelectionResult,
+  },
   { method: "GET", path: "/commerce-api/price-monitoring/runs", response: priceMonitoringRuns },
   { method: "GET", path: "/commerce-api/price-monitoring/runs/pm-run-001", response: priceMonitoringRunDetail },
   { method: "GET", path: "/commerce-api/price-monitoring/runs/pm-run-001/fetch", response: priceMonitoringExecutions[1] },
@@ -1015,7 +1322,7 @@ export const commerceFixtureRoutes: MockRoute[] = [
   {
     method: "GET",
     path: "/commerce-api/price-monitoring/runs/pm-run-001/observations",
-    response: { run_id: "pm-run-001", items: [], count: 0, matched_count: 0, unmatched_count: 0 },
+    response: priceMonitoringRunObservations,
   },
   {
     method: "GET",

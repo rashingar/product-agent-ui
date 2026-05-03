@@ -11,6 +11,11 @@ const platformNavItems = [
   { to: "/product-agent", label: "Product-Agent" },
 ];
 
+const catalogNavItems = [
+  { to: "/catalog", label: "Products" },
+  { to: "/catalog/source-url-candidates", label: "Source URL Candidates" },
+];
+
 const productAgentNavItems = [
   { to: "/product-agent", label: "Workflow" },
   { to: "/product-agent/filters", label: "Filters Manager" },
@@ -44,6 +49,7 @@ export function AppShell() {
     location.pathname.startsWith("/product-agent/") ||
     location.pathname.startsWith("/jobs/");
   const isPriceMonitoringSection = location.pathname.startsWith("/price-monitoring");
+  const isCatalogSection = location.pathname.startsWith("/catalog");
 
   return (
     <div className="app-shell">
@@ -62,7 +68,8 @@ export function AppShell() {
                   item.to === "/product-agent" && isProductAgentSection;
                 const isPriceMonitoringActive =
                   item.to === "/price-monitoring" && isPriceMonitoringSection;
-                return isActive || isProductAgentActive || isPriceMonitoringActive
+                const isCatalogActive = item.to === "/catalog" && isCatalogSection;
+                return isActive || isProductAgentActive || isPriceMonitoringActive || isCatalogActive
                   ? "nav-link active"
                   : "nav-link";
               }}
@@ -73,6 +80,20 @@ export function AppShell() {
           ))}
         </nav>
       </header>
+      {isCatalogSection ? (
+        <nav className="subnav catalog-subnav" aria-label="Catalog navigation">
+          {catalogNavItems.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/catalog"}
+              className={({ isActive }) => (isActive ? "subnav-link active" : "subnav-link")}
+            >
+              {item.label}
+            </NavLink>
+          ))}
+        </nav>
+      ) : null}
       {isProductAgentSection ? (
         <nav className="subnav" aria-label="Product-Agent navigation">
           {productAgentNavItems.map((item) => (

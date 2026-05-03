@@ -101,9 +101,97 @@ describe("platform mocked page smoke tests", () => {
     expect(within(drawer).getByText("MD-20L")).toBeInTheDocument();
     expect(within(drawer).getByText("1")).toBeInTheDocument();
     await expect(within(drawer).findByText("https://www.skroutz.gr/s/123/midea-md-20l.html")).resolves.toBeInTheDocument();
+    expect(within(drawer).getByText("Product source")).toBeInTheDocument();
+    expect(within(drawer).getByText(/scheduled-test/)).toBeInTheDocument();
+    expect(within(drawer).getByText(/source-captures\/9001\/full-snapshot\.json/)).toBeInTheDocument();
 
     fireEvent.click(within(drawer).getByRole("button", { name: "Close" }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Source URLs" })).not.toBeInTheDocument());
+  });
+
+  it("renders Source URL Candidate Review table", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog/source-url-candidates");
+
+    await expect(screen.findByRole("heading", { name: "Source URL Candidate Review" })).resolves.toBeInTheDocument();
+    await expect(screen.findByText("Midea MD-20L Αφυγραντήρας 20L")).resolves.toBeInTheDocument();
+    expect(screen.getAllByText("source-run-001").length).toBeGreaterThan(0);
+    expect(screen.getByText("0.9823")).toBeInTheDocument();
+    expect(screen.getAllByText("needs review").length).toBeGreaterThan(0);
+    expect(screen.getByRole("link", { name: "Open candidate URL 501" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy candidate URL 501" })).toBeInTheDocument();
+  });
+
+  it("filters Source URL candidates by status and source", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog/source-url-candidates");
+
+    await expect(screen.findByText("Midea MD-20L Αφυγραντήρας 20L")).resolves.toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Source name"), { target: { value: "bestprice" } });
+
+    await expect(screen.findByText("Keyboard mouse bundle")).resolves.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByText("Midea MD-20L Αφυγραντήρας 20L")).not.toBeInTheDocument());
+    expect(screen.getByLabelText("Status")).toHaveValue("needs_review");
+  });
+
+  it("opens Source URL candidate detail drawer with evidence", async () => {
+    installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog/source-url-candidates");
+
+    await expect(screen.findByText("Midea MD-20L Αφυγραντήρας 20L")).resolves.toBeInTheDocument();
+    const row = screen.getByText("Midea MD-20L Αφυγραντήρας 20L").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole("button", { name: "Details" }));
+
+    const drawer = await screen.findByRole("dialog", { name: "Source URL candidate 501" });
+    expect(within(drawer).getByText("MPN evidence")).toBeInTheDocument();
+    expect(within(drawer).getByText("Title similarity")).toBeInTheDocument();
+    expect(within(drawer).getAllByText(/Midea MD-20L/).length).toBeGreaterThan(0);
+  });
+
+  it("submits a Source URL candidate review action", async () => {
+    const mockFetch = installMockFetch(allRoutes);
+
+    renderWithRouter("/catalog/source-url-candidates");
+
+    await expect(screen.findByText("Midea MD-20L Αφυγραντήρας 20L")).resolves.toBeInTheDocument();
+    const row = screen.getByText("Midea MD-20L Αφυγραντήρας 20L").closest("tr");
+    expect(row).not.toBeNull();
+    fireEvent.click(within(row as HTMLTableRowElement).getByRole("button", { name: "Accept" }));
+
+    await expect(screen.findByText("Candidate 501 marked accepted.")).resolves.toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("accepted").length).toBeGreaterThan(0));
+    expect(
+      mockFetch.requests.some(
+        (request) =>
+          request.method === "PATCH" &&
+          request.pathname === "/commerce-api/catalog/source-url-agent/candidates/501/review" &&
+          typeof request.body === "object" &&
+          request.body !== null &&
+          !Array.isArray(request.body) &&
+          request.body.decision === "accept",
+      ),
+    ).toBe(true);
+  });
+
+  it("handles empty Source URL candidate filters", async () => {
+    installMockFetch([
+      {
+        method: "GET",
+        path: "/commerce-api/catalog/source-url-agent/candidates",
+        response: { items: [], total: 0, limit: 50, offset: 0 },
+      },
+      ...allRoutes,
+    ]);
+
+    renderWithRouter("/catalog/source-url-candidates");
+
+    await expect(screen.findByText("No source URL candidates")).resolves.toBeInTheDocument();
+    expect(screen.getByText("There are no candidates for the active filters.")).toBeInTheDocument();
   });
 
   it("supports adding validating editing and promoting source URLs in the drawer", async () => {
@@ -192,6 +280,14 @@ describe("platform mocked page smoke tests", () => {
     await expect(screen.findAllByText("Database ready")).resolves.not.toHaveLength(0);
     await expect(screen.findByText("pm-run-001")).resolves.toBeInTheDocument();
     expect(screen.getByText("exec-success")).toBeInTheDocument();
+
+    const runRow = screen.getByText("pm-run-001").closest("tr");
+    expect(runRow).not.toBeNull();
+    fireEvent.click(within(runRow as HTMLTableRowElement).getByRole("button", { name: "Use" }));
+
+    await expect(screen.findAllByText("Source URL coverage")).resolves.not.toHaveLength(0);
+    await expect(screen.findAllByText("Prior observations")).resolves.not.toHaveLength(0);
+    expect(screen.queryByText("Replaced observations")).not.toBeInTheDocument();
   });
 
   it("shows the Price Monitoring DB-required banner and disables primary actions when DB is not ready", async () => {

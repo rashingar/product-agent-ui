@@ -49,7 +49,9 @@ import type {
   PriceMonitoringReviewResponse,
   PriceMonitoringRun,
   PriceMonitoringSelectionBody,
+  PriceMonitoringSelectionItem,
   PriceMonitoringSelectionResult,
+  PriceMonitoringSourceUrlCoverage,
   RunPriceObservationsResponse,
   ReadCsvFileBody,
   ReadCsvFileResponse,
@@ -62,6 +64,10 @@ import type {
   SourceUrlImportResponse,
   SourceUrlImportCandidateReport,
   SourceUrlImportSummary,
+  SourceUrlCandidate,
+  SourceUrlCandidateListParams,
+  SourceUrlCandidateListResponse,
+  SourceUrlCandidateReviewBody,
   SourceUrlListResponse,
   SourceUrlSummaryResponse,
   SourceUrlUpdateBody,
@@ -333,6 +339,7 @@ function normalizeSourceUrl(value: unknown): SourceUrl | null {
     id: normalizeNullableId(value.id ?? value.source_url_id),
     source_url_id: normalizeNullableId(value.source_url_id ?? value.id),
     catalog_product_id: normalizeNullableId(value.catalog_product_id),
+    product_source_id: normalizeNullableId(value.product_source_id),
     catalog_source: normalizeNullableString(value.catalog_source),
     model: normalizeNullableString(value.model),
     mpn: normalizeNullableString(value.mpn),
@@ -351,6 +358,20 @@ function normalizeSourceUrl(value: unknown): SourceUrl | null {
     last_failed_at: normalizeNullableString(value.last_failed_at),
     failure_count: normalizeOptionalNumber(value.failure_count),
     last_error: normalizeNullableString(value.last_error),
+    capture_status: normalizeNullableString(value.capture_status),
+    last_fetch_status: normalizeNullableString(value.last_fetch_status),
+    last_capture_status: normalizeNullableString(value.last_capture_status),
+    last_capture_strategy: normalizeNullableString(value.last_capture_strategy),
+    last_capture_at: normalizeNullableString(value.last_capture_at),
+    last_fetched_at: normalizeNullableString(value.last_fetched_at ?? value.fetched_at),
+    last_capture_snapshot_id: normalizeNullableId(value.last_capture_snapshot_id),
+    source_capture_snapshot_id: normalizeNullableId(value.source_capture_snapshot_id),
+    artifact_ref: normalizeArtifactPathValue(value.artifact_ref),
+    artifact_refs: getArrayPayload(value.artifact_refs, ["items", "artifacts", "data", "results"])
+      .map(normalizeCommerceArtifact)
+      .filter((item): item is ArtifactItem => item !== null),
+    snapshot_ref: normalizeArtifactPathValue(value.snapshot_ref),
+    full_snapshot_ref: normalizeArtifactPathValue(value.full_snapshot_ref),
     created_at: normalizeNullableString(value.created_at),
     updated_at: normalizeNullableString(value.updated_at),
   };
@@ -409,6 +430,8 @@ function normalizeSourceUrlSummary(payload: unknown): SourceUrlSummaryResponse {
 
   return {
     ...source,
+    catalog_source: normalizeNullableString(source.catalog_source),
+    catalog_product_count: normalizeCounter(source.catalog_product_count),
     total_count: normalizeCounter(source.total_count ?? source.source_url_count ?? source.total ?? source.count),
     active_count: normalizeCounter(source.active_count ?? statusCounters.active),
     needs_review_count: normalizeCounter(source.needs_review_count ?? statusCounters.needs_review),
@@ -432,6 +455,7 @@ function normalizeSourceUrlSummary(payload: unknown): SourceUrlSummaryResponse {
     by_status: statusCounters,
     by_type: typeCounters,
     by_source: sourceCounters,
+    updated_at: normalizeNullableString(source.updated_at),
   };
 }
 
@@ -524,12 +548,16 @@ function normalizeSourceUrlImportResponse(payload: unknown): SourceUrlImportResp
   const reportItems = getArrayPayload(source.report_items ?? source.items, ["items", "data", "results"])
     .map(normalizeSourceUrlImportReportItem)
     .filter((item): item is SourceUrlImportCandidateReport => item !== null);
-  const apply = source.apply === true;
+  const mode = normalizeNullableString(source.mode);
+  const apply = source.apply === true || source.applied === true || mode === "apply" || mode === "applied";
+  const sourceStats = normalizeSourceStats(source.source_stats ?? source.sources);
 
   return {
     ...source,
     ...summary,
+    applied: source.applied === true || apply,
     apply,
+    mode,
     summary: {
       ...summary,
       would_import_count:
@@ -537,15 +565,163 @@ function normalizeSourceUrlImportResponse(payload: unknown): SourceUrlImportResp
       would_update_count:
         summary.would_update_count ?? (!apply ? summary.updated_count : undefined),
     },
-    sources_processed: normalizeStringArray(source.sources_processed),
+    sources: sourceStats,
+    items: reportItems,
+    sources_processed: normalizeStringArray(
+      source.sources_processed ?? (isRecord(source.sources) ? Object.keys(source.sources) : []),
+    ),
     warnings: normalizeStringArray(source.warnings),
     skipped_reasons: normalizeNumberRecord(source.skipped_reasons),
     changed_source_urls: Array.isArray(source.changed_source_urls) ? source.changed_source_urls : [],
-    source_stats: normalizeSourceStats(source.source_stats),
+    source_stats: sourceStats,
     candidate_evidence: Array.isArray(source.candidate_evidence) ? source.candidate_evidence : [],
     report_items: reportItems,
     truncated: source.truncated === true,
     report_truncated: source.report_truncated === true || source.truncated === true,
+  };
+}
+
+function normalizeJsonLike(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+  if (trimmed.length === 0) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(trimmed) as unknown;
+  } catch {
+    return value;
+  }
+}
+
+function normalizeSourceUrlCandidate(value: unknown): SourceUrlCandidate | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  const id = normalizeNullableId(value.id ?? value.candidate_id);
+  if (id === null) {
+    return null;
+  }
+
+  return {
+    ...value,
+    id,
+    run_id: normalizeNullableId(value.run_id),
+    catalog_product_id: normalizeNullableId(value.catalog_product_id),
+    model: normalizeNullableString(value.model),
+    mpn: normalizeNullableString(value.mpn),
+    manufacturer: normalizeNullableString(value.manufacturer),
+    product_name: normalizeNullableString(value.product_name ?? value.name),
+    category: normalizeNullableString(value.category),
+    own_price: normalizeNullableId(value.own_price),
+    source_name: normalizeNullableString(value.source_name),
+    source_domain: normalizeNullableString(value.source_domain),
+    source_type: normalizeNullableString(value.source_type),
+    expected_listing:
+      typeof value.expected_listing === "boolean"
+        ? value.expected_listing
+        : normalizeNullableString(value.expected_listing),
+    candidate_url: normalizeNullableString(value.candidate_url ?? value.url),
+    canonical_url: normalizeNullableString(value.canonical_url ?? value.url_normalized),
+    candidate_title: normalizeNullableString(value.candidate_title ?? value.title),
+    candidate_price: normalizeNullableId(value.candidate_price),
+    match_status: normalizeNullableString(value.match_status),
+    confidence_score: normalizeNullableId(value.confidence_score ?? value.confidence),
+    match_method: normalizeNullableString(value.match_method),
+    evidence_json: normalizeJsonLike(value.evidence_json ?? value.evidence),
+    competing_candidates_count: normalizeNullableId(value.competing_candidates_count),
+    searched_queries_json: normalizeJsonLike(value.searched_queries_json ?? value.searched_queries),
+    status: normalizeNullableString(value.status) ?? "needs_review",
+    reviewed_by: normalizeNullableString(value.reviewed_by),
+    reviewed_at: normalizeNullableString(value.reviewed_at),
+    notes: normalizeNullableString(value.notes),
+    created_at: normalizeNullableString(value.created_at),
+    updated_at: normalizeNullableString(value.updated_at),
+  };
+}
+
+function normalizeSourceUrlCandidateList(payload: unknown): SourceUrlCandidateListResponse {
+  const source = isRecord(payload) ? payload : {};
+  const items = getArrayPayload(payload, ["items", "candidates", "data", "results"])
+    .map(normalizeSourceUrlCandidate)
+    .filter((item): item is SourceUrlCandidate => item !== null);
+
+  return {
+    items,
+    total: normalizeOptionalNumber(source.total ?? source.count) ?? items.length,
+    limit: normalizeOptionalNumber(source.limit) ?? items.length,
+    offset: normalizeOptionalNumber(source.offset) ?? 0,
+  };
+}
+
+function normalizeSourceUrlCoverage(value: unknown): PriceMonitoringSourceUrlCoverage | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    source: normalizeNullableString(value.source),
+    selected_count: normalizeOptionalNumber(value.selected_count) ?? undefined,
+    products_with_active_source_urls: normalizeOptionalNumber(value.products_with_active_source_urls) ?? undefined,
+    products_without_active_source_urls: normalizeOptionalNumber(value.products_without_active_source_urls) ?? undefined,
+    coverage_percent: normalizeOptionalNumber(value.coverage_percent),
+    active_source_url_count: normalizeOptionalNumber(value.active_source_url_count) ?? undefined,
+    needs_review_source_url_count: normalizeOptionalNumber(value.needs_review_source_url_count) ?? undefined,
+    broken_source_url_count: normalizeOptionalNumber(value.broken_source_url_count) ?? undefined,
+    disabled_source_url_count: normalizeOptionalNumber(value.disabled_source_url_count) ?? undefined,
+    redirected_source_url_count: normalizeOptionalNumber(value.redirected_source_url_count) ?? undefined,
+    missing_source_url_models: normalizeStringArray(value.missing_source_url_models),
+    missing_source_url_catalog_product_ids: Array.isArray(value.missing_source_url_catalog_product_ids)
+      ? value.missing_source_url_catalog_product_ids
+          .map(normalizeNullableId)
+          .filter((item): item is string | number => item !== null)
+      : [],
+    has_active_source_url:
+      typeof value.has_active_source_url === "boolean" ? value.has_active_source_url : undefined,
+    status_counts: normalizeNumberRecord(value.status_counts),
+    active_source_urls: getArrayPayload(value.active_source_urls, ["items", "source_urls", "data", "results"])
+      .map(normalizeSourceUrl)
+      .filter((item): item is SourceUrl => item !== null),
+    warning: normalizeNullableString(value.warning),
+  };
+}
+
+function normalizeSelectionItem(value: unknown): PriceMonitoringSelectionItem | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+
+  return {
+    ...value,
+    catalog_product_id: normalizeNullableId(value.catalog_product_id),
+    source_url_coverage: normalizeSourceUrlCoverage(value.source_url_coverage),
+  } as PriceMonitoringSelectionItem;
+}
+
+function normalizeSelectionResult(payload: unknown): PriceMonitoringSelectionResult {
+  if (!isRecord(payload)) {
+    return {};
+  }
+
+  const selectedItems = getArrayPayload(payload.selected_items ?? payload.selected ?? payload.items, ["items", "data", "results"])
+    .map(normalizeSelectionItem)
+    .filter((item): item is PriceMonitoringSelectionItem => item !== null);
+  const skippedItems = getArrayPayload(payload.skipped_items ?? payload.skipped, ["items", "data", "results"])
+    .filter(isRecord) as PriceMonitoringSelectionItem[];
+
+  return {
+    ...payload,
+    run_id: normalizeNullableId(payload.run_id),
+    selected_items: selectedItems,
+    selected: selectedItems,
+    skipped_items: skippedItems,
+    source_url_coverage: normalizeSourceUrlCoverage(payload.source_url_coverage),
   };
 }
 
@@ -841,6 +1017,7 @@ function normalizeRun(value: unknown): PriceMonitoringRun | null {
 
   return {
     ...value,
+    source_url_coverage: normalizeSourceUrlCoverage(value.source_url_coverage),
     latest_fetch: isRecord(value.latest_fetch) ? normalizeFetchResult(value.latest_fetch) : null,
   } as PriceMonitoringRun;
 }
@@ -992,6 +1169,26 @@ function normalizeFetchResult(payload: unknown): FetchPriceMonitoringResult {
         ? payload.error
         : null,
     warnings: normalizeStringArray(payload.warnings),
+    observation_count: normalizeOptionalNumber(payload.observation_count) ?? undefined,
+    appended_observation_count:
+      normalizeOptionalNumber(payload.appended_observation_count ?? payload.observation_count) ?? undefined,
+    prior_observation_count:
+      normalizeOptionalNumber(
+        payload.prior_observation_count ??
+          payload.retained_observation_count ??
+          payload.previous_observation_count ??
+          payload.replaced_observation_count,
+      ) ?? undefined,
+    retained_observation_count:
+      normalizeOptionalNumber(payload.retained_observation_count ?? payload.prior_observation_count) ?? undefined,
+    replaced_observation_count: normalizeOptionalNumber(payload.replaced_observation_count) ?? undefined,
+    catalog_snapshot_count: normalizeOptionalNumber(payload.catalog_snapshot_count),
+    matched_observation_count: normalizeOptionalNumber(payload.matched_observation_count) ?? undefined,
+    unmatched_observation_count: normalizeOptionalNumber(payload.unmatched_observation_count) ?? undefined,
+    was_refetch: typeof payload.was_refetch === "boolean" ? payload.was_refetch : undefined,
+    fetch_attempt: normalizeOptionalNumber(payload.fetch_attempt) ?? undefined,
+    observation_batch_id: normalizeNullableId(payload.observation_batch_id),
+    observation_history_count: normalizeOptionalNumber(payload.observation_history_count) ?? undefined,
     persistence_warnings: normalizeStringArray(payload.persistence_warnings),
     alert_warnings: normalizeStringArray(payload.alert_warnings),
     artifacts: getArrayPayload(payload.artifacts, ["items", "artifacts", "data", "results"])
@@ -1111,9 +1308,32 @@ function normalizePriceObservation(value: unknown): PriceObservation | null {
     return null;
   }
 
+  const rawObservation = isRecord(value.raw_observation) ? value.raw_observation : null;
+  const rawPersistence = isRecord(rawObservation?.persistence) ? rawObservation.persistence : {};
+
   return {
     ...value,
-    raw_observation: isRecord(value.raw_observation) ? value.raw_observation : null,
+    product_id: normalizeNullableId(value.product_id),
+    product_source_id: normalizeNullableId(value.product_source_id),
+    source_url_id: normalizeNullableId(value.source_url_id),
+    vendor_id: normalizeNullableId(value.vendor_id),
+    source_capture_snapshot_id: normalizeNullableId(value.source_capture_snapshot_id),
+    execution_id: normalizeNullableId(value.execution_id ?? rawPersistence.execution_id),
+    fetch_attempt: normalizeNullableId(value.fetch_attempt ?? rawPersistence.fetch_attempt),
+    was_refetch:
+      typeof value.was_refetch === "boolean"
+        ? value.was_refetch
+        : typeof rawPersistence.was_refetch === "boolean"
+          ? rawPersistence.was_refetch
+          : null,
+    observation_batch_id: normalizeNullableId(value.observation_batch_id ?? rawPersistence.observation_batch_id),
+    artifact_ref: normalizeArtifactPathValue(value.artifact_ref),
+    artifact_refs: getArrayPayload(value.artifact_refs, ["items", "artifacts", "data", "results"])
+      .map(normalizeCommerceArtifact)
+      .filter((item): item is ArtifactItem => item !== null),
+    snapshot_ref: normalizeArtifactPathValue(value.snapshot_ref),
+    full_snapshot_ref: normalizeArtifactPathValue(value.full_snapshot_ref),
+    raw_observation: rawObservation,
   } as PriceObservation;
 }
 
@@ -1651,6 +1871,37 @@ export const commerceClient = {
     );
   },
 
+  async listSourceUrlCandidates(
+    params: SourceUrlCandidateListParams = {},
+    signal?: AbortSignal,
+  ): Promise<SourceUrlCandidateListResponse> {
+    return normalizeSourceUrlCandidateList(
+      await request<unknown>(
+        appendQuery("/catalog/source-url-agent/candidates", params as QueryParams),
+        { signal },
+      ),
+    );
+  },
+
+  async reviewSourceUrlCandidate(
+    candidateId: string | number,
+    body: SourceUrlCandidateReviewBody,
+    signal?: AbortSignal,
+  ): Promise<SourceUrlCandidate> {
+    return (
+      normalizeSourceUrlCandidate(
+        await request<unknown>(
+          `/catalog/source-url-agent/candidates/${encodeURIComponent(String(candidateId))}/review`,
+          {
+            method: "PATCH",
+            body,
+            signal,
+          },
+        ),
+      ) ?? { id: candidateId, status: body.decision === "accept" ? "accepted" : "needs_review" }
+    );
+  },
+
   async previewSourceUrlImport(
     body: SourceUrlImportRequest,
     signal?: AbortSignal,
@@ -1727,26 +1978,30 @@ export const commerceClient = {
     return toCommerceArtifactUrl(path);
   },
 
-  previewPriceMonitoringSelection(
+  async previewPriceMonitoringSelection(
     body: PriceMonitoringSelectionBody,
     signal?: AbortSignal,
   ): Promise<PriceMonitoringSelectionResult> {
-    return request<PriceMonitoringSelectionResult>("/price-monitoring/selection/preview", {
-      method: "POST",
-      body,
-      signal,
-    });
+    return normalizeSelectionResult(
+      await request<unknown>("/price-monitoring/selection/preview", {
+        method: "POST",
+        body,
+        signal,
+      }),
+    );
   },
 
-  createPriceMonitoringRun(
+  async createPriceMonitoringRun(
     body: PriceMonitoringSelectionBody,
     signal?: AbortSignal,
   ): Promise<PriceMonitoringSelectionResult> {
-    return request<PriceMonitoringSelectionResult>("/price-monitoring/runs", {
-      method: "POST",
-      body,
-      signal,
-    });
+    return normalizeSelectionResult(
+      await request<unknown>("/price-monitoring/runs", {
+        method: "POST",
+        body,
+        signal,
+      }),
+    );
   },
 
   async listPriceMonitoringRuns(signal?: AbortSignal): Promise<PriceMonitoringRun[]> {

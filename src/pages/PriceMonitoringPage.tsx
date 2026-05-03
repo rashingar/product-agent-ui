@@ -31,6 +31,7 @@ import type {
   PriceMonitoringSelectionBody,
   PriceMonitoringSelectionItem,
   PriceMonitoringSelectionResult,
+  PriceMonitoringSourceUrlCoverage,
   PriceMonitoringSource,
   RunPriceObservationsResponse,
 } from "../api/commerceTypes";
@@ -351,6 +352,54 @@ function getSelectedItems(result: PriceMonitoringSelectionResult): PriceMonitori
   return result.selected_items ?? result.selected ?? [];
 }
 
+function getPriorObservationCount(result: FetchPriceMonitoringResult | null | undefined): number | undefined {
+  return result?.prior_observation_count ?? result?.retained_observation_count ?? result?.replaced_observation_count;
+}
+
+function formatPercent(value: unknown): string {
+  return typeof value === "number" && Number.isFinite(value) ? `${value.toFixed(1)}%` : formatValue(value);
+}
+
+function hasCoverageDetails(coverage: PriceMonitoringSourceUrlCoverage | null | undefined): boolean {
+  return Boolean(
+    coverage &&
+      (coverage.products_with_active_source_urls !== undefined ||
+        coverage.products_without_active_source_urls !== undefined ||
+        coverage.active_source_url_count !== undefined ||
+        coverage.warning),
+  );
+}
+
+function SourceUrlCoverageSummary({
+  coverage,
+}: {
+  coverage: PriceMonitoringSourceUrlCoverage | null | undefined;
+}) {
+  if (!hasCoverageDetails(coverage)) {
+    return null;
+  }
+
+  return (
+    <div className="compact-list">
+      <strong>Source URL coverage</strong>
+      <dl className="summary-grid">
+        <SummaryItem label="Source" value={coverage?.source} />
+        <SummaryItem label="Products covered" value={coverage?.products_with_active_source_urls} />
+        <SummaryItem label="Products without active URLs" value={coverage?.products_without_active_source_urls} />
+        <SummaryItem label="Coverage" value={formatPercent(coverage?.coverage_percent)} />
+        <SummaryItem label="Active URLs" value={coverage?.active_source_url_count} />
+        <SummaryItem label="Needs review URLs" value={coverage?.needs_review_source_url_count} />
+        <SummaryItem label="Broken URLs" value={coverage?.broken_source_url_count} />
+        <SummaryItem label="Disabled URLs" value={coverage?.disabled_source_url_count} />
+      </dl>
+      {coverage?.warning ? <p className="form-warning">{coverage.warning}</p> : null}
+      {coverage?.missing_source_url_models && coverage.missing_source_url_models.length > 0 ? (
+        <p className="muted">Missing active source URLs: {coverage.missing_source_url_models.join(", ")}</p>
+      ) : null}
+    </div>
+  );
+}
+
 function getActionState(
   row: PriceMonitoringReviewItem,
   actionState: Record<string, RowActionState>,
@@ -416,6 +465,7 @@ function SelectionResultBlock({
 }) {
   const selectedItems = getSelectedItems(result);
   const hierarchyFilters = filters ?? extractSelectionFilters(result);
+  const hasItemCoverage = selectedItems.some((item) => hasCoverageDetails(item.source_url_coverage));
 
   return (
     <div className="state-block">
@@ -432,6 +482,7 @@ function SelectionResultBlock({
       </dl>
 
       <HierarchyFilterSummary filters={hierarchyFilters} />
+      <SourceUrlCoverageSummary coverage={result.source_url_coverage} />
 
       {result.skipped_by_reason ? (
         <div className="compact-list">
@@ -458,6 +509,8 @@ function SelectionResultBlock({
                 <th>Category</th>
                 <th>Sub-Category</th>
                 <th>Manufacturer</th>
+                {hasItemCoverage ? <th>Active source URLs</th> : null}
+                {hasItemCoverage ? <th>Coverage status</th> : null}
               </tr>
             </thead>
             <tbody>
@@ -470,6 +523,20 @@ function SelectionResultBlock({
                   <td>{formatValue(item.category_name)}</td>
                   <td>{formatValue(item.sub_category)}</td>
                   <td>{formatValue(item.manufacturer)}</td>
+                  {hasItemCoverage ? (
+                    <td>{formatValue(item.source_url_coverage?.active_source_url_count)}</td>
+                  ) : null}
+                  {hasItemCoverage ? (
+                    <td>
+                      <span
+                        className={`status-badge ${
+                          item.source_url_coverage?.has_active_source_url === false ? "warning" : "ok"
+                        }`}
+                      >
+                        {item.source_url_coverage?.has_active_source_url === false ? "Missing active URL" : "Covered"}
+                      </span>
+                    </td>
+                  ) : null}
                 </tr>
               ))}
             </tbody>
@@ -522,6 +589,7 @@ function RunSummaryBlock({
       ) : null}
       {latestFetch?.error ? <p className="form-error">{latestFetch.error}</p> : null}
       <HierarchyFilterSummary filters={hierarchyFilters} />
+      <SourceUrlCoverageSummary coverage={run.source_url_coverage} />
       {run.skipped_by_reason ? (
         <div className="compact-list">
           <strong>Skipped by reason</strong>
@@ -626,13 +694,16 @@ function FetchResultBlock({
         <SummaryItem label="Fetch result" value={getArtifactPath(result.fetch_result_path)} />
         <SummaryItem label="Execution metadata" value={getArtifactPath(result.execution_path)} />
         <SummaryItem label="Log path" value={getArtifactPath(result.log_path)} />
-        <SummaryItem label="Observations" value={result.observation_count} />
-        <SummaryItem label="Replaced observations" value={result.replaced_observation_count} />
+        <SummaryItem label="Stored observations" value={result.observation_count} />
+        <SummaryItem label="Appended observations" value={result.appended_observation_count} />
+        <SummaryItem label="Prior observations" value={getPriorObservationCount(result)} />
         <SummaryItem label="Catalog snapshot" value={result.catalog_snapshot_count} />
         <SummaryItem label="Matched observations" value={result.matched_observation_count} />
         <SummaryItem label="Unmatched observations" value={result.unmatched_observation_count} />
         <SummaryItem label="Fetch attempt" value={result.fetch_attempt} />
         <SummaryItem label="Was refetch" value={formatBoolean(result.was_refetch)} />
+        <SummaryItem label="Observation batch" value={result.observation_batch_id} />
+        <SummaryItem label="Observation history" value={result.observation_history_count} />
         <SummaryItem label="Persistence" value={result.persistence_status} />
         <SummaryItem label="Alert evaluation status" value={result.alert_evaluation_status} />
         <SummaryItem label="Alert events created" value={result.alert_event_count} />
@@ -650,7 +721,7 @@ function FetchResultBlock({
         <p className="form-warning">PostgreSQL was not ready when this fetch result was produced, so observations were not stored.</p>
       ) : null}
       {result.was_refetch ? (
-        <p className="muted">Refetch completed. Previous observations for this run were replaced.</p>
+        <p className="muted">Refetch completed. Previous observations remain in history; this fetch is shown as another observation batch.</p>
       ) : null}
       {artifacts.length > 0 && artifactsAreDiagnostic ? (
         <DiagnosticArtifactsBlock
@@ -953,6 +1024,17 @@ function filterStoredObservations(
   });
 }
 
+function hasObservationHistoryMetadata(item: PriceObservation): boolean {
+  return Boolean(
+    item.execution_id ??
+      item.fetch_attempt ??
+      item.observation_batch_id ??
+      item.product_source_id ??
+      item.source_capture_snapshot_id ??
+      item.created_at,
+  );
+}
+
 function ObservationTable({
   items,
   isDbAvailable,
@@ -963,6 +1045,8 @@ function ObservationTable({
   if (items.length === 0) {
     return <EmptyState title="No stored observations" message="No observations matched the current filters." />;
   }
+
+  const showHistoryColumns = items.some(hasObservationHistoryMetadata);
 
   return (
     <div className="table-wrap observation-table-wrap">
@@ -982,6 +1066,9 @@ function ObservationTable({
             <th>Availability</th>
             <th>Product URL</th>
             <th>Observed at</th>
+            {showHistoryColumns ? <th>Attempt</th> : null}
+            {showHistoryColumns ? <th>Batch/source</th> : null}
+            {showHistoryColumns ? <th>Stored at</th> : null}
             <th>Actions</th>
           </tr>
         </thead>
@@ -1017,6 +1104,21 @@ function ObservationTable({
                   )}
                 </td>
                 <td className="nowrap-cell">{formatValue(item.observed_at)}</td>
+                {showHistoryColumns ? (
+                  <td>
+                    {formatValue(item.fetch_attempt)}
+                    {item.was_refetch === true ? <small className="artifact-path">Refetch</small> : null}
+                  </td>
+                ) : null}
+                {showHistoryColumns ? (
+                  <td>
+                    {formatValue(item.observation_batch_id ?? item.execution_id)}
+                    <small className="artifact-path">
+                      {formatValue(item.product_source_id ?? item.source_capture_snapshot_id)}
+                    </small>
+                  </td>
+                ) : null}
+                {showHistoryColumns ? <td className="nowrap-cell">{formatValue(item.created_at)}</td> : null}
                 <td>
                   {isDbAvailable ? (
                     <Link className="button secondary" to={getCreateAlertLink(item)}>
@@ -1193,7 +1295,9 @@ function StoredObservationsSection({
             />
             <SummaryItem label="Fetch attempt" value={fetchResult?.fetch_attempt} />
             <SummaryItem label="Was refetch" value={formatBoolean(fetchResult?.was_refetch)} />
-            <SummaryItem label="Replaced observations" value={fetchResult?.replaced_observation_count} />
+            <SummaryItem label="Prior observations" value={getPriorObservationCount(fetchResult)} />
+            <SummaryItem label="Observation batch" value={fetchResult?.observation_batch_id} />
+            <SummaryItem label="Observation history" value={fetchResult?.observation_history_count} />
             <SummaryItem label="Persistence status" value={fetchResult?.persistence_status} />
           </dl>
 

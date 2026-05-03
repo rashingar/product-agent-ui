@@ -40,10 +40,15 @@ function sourceUrlId(sourceUrl: SourceUrl): string | number | null {
 function sourceUrlStatusClass(status: string | null | undefined): string {
   switch (status) {
     case "active":
+    case "success":
+    case "succeeded":
       return "success";
     case "needs_review":
+    case "warning":
       return "warning";
     case "broken":
+    case "failed":
+    case "error":
       return "danger";
     case "disabled":
       return "neutral";
@@ -52,6 +57,33 @@ function sourceUrlStatusClass(status: string | null | undefined): string {
     default:
       return "neutral";
   }
+}
+
+function hasCaptureMetadata(sourceUrl: SourceUrl): boolean {
+  return Boolean(
+    sourceUrl.product_source_id ??
+      sourceUrl.capture_status ??
+      sourceUrl.last_capture_status ??
+      sourceUrl.last_fetch_status ??
+      sourceUrl.last_capture_strategy ??
+      sourceUrl.last_capture_snapshot_id ??
+      sourceUrl.source_capture_snapshot_id ??
+      sourceUrl.snapshot_ref ??
+      sourceUrl.full_snapshot_ref,
+  );
+}
+
+function formatArtifactReference(value: unknown): string {
+  if (typeof value === "string" && value.trim().length > 0) {
+    return value;
+  }
+
+  if (typeof value === "object" && value !== null && "path" in value) {
+    const path = (value as { path?: unknown }).path;
+    return typeof path === "string" && path.trim().length > 0 ? path : "-";
+  }
+
+  return "-";
 }
 
 function normalizeActionLabel(status: string): string {
@@ -289,7 +321,7 @@ export function SourceUrlImportPanel({
       include_artifacts: includeArtifacts,
       include_legacy_runs: includeLegacyRuns,
       limit: Number.isFinite(parsedLimit) ? parsedLimit : null,
-      report_item_limit: Number.isFinite(parsedReportLimit) ? parsedReportLimit : 200,
+      report_items_limit: Number.isFinite(parsedReportLimit) ? parsedReportLimit : 200,
     };
   }, [catalogSource, includeArtifacts, includeLegacyRuns, includeObservations, limit, reportItemLimit]);
 
@@ -696,6 +728,8 @@ export function CatalogSourceUrlManager({
     return null;
   }
 
+  const showCaptureColumns = items.some(hasCaptureMetadata);
+
   return (
     <div className="source-url-drawer-backdrop" onMouseDown={onClose}>
       <section
@@ -803,6 +837,9 @@ export function CatalogSourceUrlManager({
               <th>Last success</th>
               <th>Last failed</th>
               <th>Last error</th>
+              {showCaptureColumns ? <th>Product source</th> : null}
+              {showCaptureColumns ? <th>Capture</th> : null}
+              {showCaptureColumns ? <th>Snapshot</th> : null}
               <th>Actions</th>
             </tr>
           </thead>
@@ -879,6 +916,28 @@ export function CatalogSourceUrlManager({
                     <td>{formatDate(sourceUrl.last_success_at)}</td>
                     <td>{formatDate(sourceUrl.last_failed_at)}</td>
                     <td>{formatValue(sourceUrl.last_error)}</td>
+                    {showCaptureColumns ? <td>{formatValue(sourceUrl.product_source_id)}</td> : null}
+                    {showCaptureColumns ? (
+                      <td>
+                        <span className={`status-badge ${sourceUrlStatusClass(sourceUrl.capture_status ?? sourceUrl.last_capture_status ?? sourceUrl.last_fetch_status ?? null)}`}>
+                          {normalizeActionLabel(
+                            sourceUrl.capture_status ?? sourceUrl.last_capture_status ?? sourceUrl.last_fetch_status ?? "-",
+                          )}
+                        </span>
+                        <small className="artifact-path">
+                          {formatValue(sourceUrl.last_capture_strategy)} /{" "}
+                          {formatDate(sourceUrl.last_capture_at ?? sourceUrl.last_fetched_at ?? sourceUrl.last_success_at)}
+                        </small>
+                      </td>
+                    ) : null}
+                    {showCaptureColumns ? (
+                      <td>
+                        {formatValue(sourceUrl.source_capture_snapshot_id ?? sourceUrl.last_capture_snapshot_id)}
+                        <small className="artifact-path">
+                          {formatArtifactReference(sourceUrl.full_snapshot_ref ?? sourceUrl.snapshot_ref)}
+                        </small>
+                      </td>
+                    ) : null}
                     <td>
                       <div className="button-row source-url-actions">
                         {isEditing ? (
@@ -956,7 +1015,7 @@ export function CatalogSourceUrlManager({
               })
             ) : (
               <tr>
-                <td colSpan={11}>No source URLs for this product yet.</td>
+                <td colSpan={showCaptureColumns ? 14 : 11}>No source URLs for this product yet.</td>
               </tr>
             )}
           </tbody>
